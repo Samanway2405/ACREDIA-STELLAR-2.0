@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { getServiceRoleClient } from '@/lib/serverAuth';
+import { getCredential, isRevoked } from '@/lib/contractReads';
 
 export const dynamic = 'force-dynamic';
+
+/** Re-derive the credential hash from stored metadata (server-side, Node crypto). */
+function deriveCredentialHash(metadata: unknown): string {
+    return createHash('sha256')
+        .update(JSON.stringify(metadata))
+        .digest('hex');
+}
 
 export async function GET(
     _request: NextRequest,
@@ -18,6 +27,7 @@ export async function GET(
             );
         }
 
+        // ── 1. Fetch from Supabase ────────────────────────────────────────────
         const supabase = getServiceRoleClient();
         const { data, error } = await supabase
             .from('credentials')
@@ -28,6 +38,9 @@ export async function GET(
                 revoked,
                 revoked_at,
                 metadata,
+                ipfs_hash,
+                student_wallet_address,
+                issuer_wallet_address,
                 institution:institutions!credentials_institution_id_fkey (
                     name
                 )
@@ -37,7 +50,7 @@ export async function GET(
 
         if (error) {
             return NextResponse.json(
-                { success: false, error: 'Failed to verify credential' },
+                { success: false, error: 'Failed to query credential' },
                 { status: 500 }
             );
         }
@@ -49,26 +62,82 @@ export async function GET(
             );
         }
 
+        // ── 2. Fetch from Soroban contract ────────────────────────────────────
+        const [onChain, onChainRevoked] = await Promise.all([
+            getCredential(data.token_id),
+            isRevoked(data.token_id),
+        ]);
+
+        // ── 3. Cross-check ────────────────────────────────────────────────────
+        const dbHash = data.metadata ? deriveCredentialHash(data.metadata) : null;
+        const expectedUri = data.ipfs_hash ? `ipfs://${data.ipfs_hash}` : null;
+
+        const onChainMatch = onChain !== null && (() => {
+            const issuerMatch =
+                data.issuer_wallet_address &&
+                onChain.issuer.toLowerCase() === data.issuer_wallet_address.toLowerCase();
+
+            const studentMatch =
+                data.student_wallet_address &&
+                onChain.student.toLowerCase() === data.student_wallet_address.toLowerCase();
+
+            const hashMatch = dbHash && onChain.hash === dbHash;
+
+            const uriMatch = expectedUri && onChain.uri === expectedUri;
+
+            return Boolean(issuerMatch && studentMatch && hashMatch && uriMatch);
+        })();
+
+        // Revocation: trust the chain over the DB (chain is authoritative)
+        const revoked = onChainRevoked || data.revoked;
+
+        const verified = onChain !== null && onChainMatch === true && !revoked;
+
+        // ── 4. Build response ─────────────────────────────────────────────────
         const institution = Array.isArray(data.institution)
             ? data.institution[0]
             : data.institution;
 
         const credentialData = data.metadata?.credentialData ?? {};
-        const safeCredential = {
-            tokenId: data.token_id,
-            issuedAt: data.issued_at,
-            revoked: data.revoked,
-            revokedAt: data.revoked_at,
-            institutionName: institution?.name ?? credentialData.institutionName ?? null,
-            credentialType: credentialData.credentialType ?? null,
-            degree: credentialData.degree ?? null,
-            major: credentialData.major ?? null,
-            issueDate: credentialData.issueDate ?? null,
-        };
 
         return NextResponse.json({
             success: true,
-            credential: safeCredential,
+            credential: {
+                tokenId: data.token_id,
+                issuedAt: data.issued_at,
+                revoked,
+                revokedAt: data.revoked_at,
+                institutionName: institution?.name ?? credentialData.institutionName ?? null,
+                credentialType: credentialData.credentialType ?? null,
+                degree: credentialData.degree ?? null,
+                major: credentialData.major ?? null,
+                issueDate: credentialData.issueDate ?? null,
+            },
+            verification: {
+                verified,
+                revoked,
+                databaseMatch: data !== null,
+                onChainMatch: onChainMatch === true,
+                onChainFound: onChain !== null,
+                // Granular mismatch details (useful for debugging / UI)
+                checks: onChain
+                    ? {
+                          issuerMatch:
+                              data.issuer_wallet_address
+                                  ? onChain.issuer.toLowerCase() ===
+                                    data.issuer_wallet_address.toLowerCase()
+                                  : null,
+                          studentMatch:
+                              data.student_wallet_address
+                                  ? onChain.student.toLowerCase() ===
+                                    data.student_wallet_address.toLowerCase()
+                                  : null,
+                          hashMatch: dbHash ? onChain.hash === dbHash : null,
+                          uriMatch: expectedUri ? onChain.uri === expectedUri : null,
+                          notRevoked: !onChainRevoked,
+                      }
+                    : null,
+            },
         });
     } catch {
         return NextResponse.json(
