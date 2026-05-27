@@ -337,7 +337,7 @@ function AdminDashboardContent() {
 
 export default function AdminDashboardPage() {
     return (
-        <ProtectedRoute>
+        <ProtectedRoute allowedRoles={['admin']}>
             <AdminDashboardContent />
         </ProtectedRoute>
     );
