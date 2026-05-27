@@ -1,74 +1,81 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, String};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    String,
+};
 
-/// Storage key enum — avoids `format!` (unavailable in no_std)
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum ContractError {
+    AlreadyInitialized = 1,
+    IssuerNotAuthorized = 2,
+    CredentialAlreadyExists = 3,
+    CredentialNotFound = 4,
+    AlreadyRevoked = 5,
+    UnauthorizedRevoker = 6,
+}
+
 #[contracttype]
 pub enum DataKey {
     Owner,
     NextTokenId,
     Authorized(Address),
     Credential(u64),
-    HashIndex(String),
+    HashIndex(BytesN<32>),
     TotalCredentials,
 }
 
-/// Credential struct representing an issued credential
 #[contracttype]
 #[derive(Clone)]
 pub struct Credential {
     pub token_id: u64,
     pub student: Address,
     pub issuer: Address,
-    pub credential_hash: String,
+    pub credential_hash: BytesN<32>,
     pub ipfs_hash: String,
     pub issued_at: u64,
     pub revoked: bool,
 }
 
-/// AcrediaCredential Smart Contract for Stellar
-/// Combines CredentialNFT and CredentialRegistry functionality
-/// Manages credential issuance, verification, and authorization
 #[contract]
 pub struct AcrediaCredential;
 
 #[contractimpl]
 impl AcrediaCredential {
-    /// Initialize contract with owner
-    pub fn initialize(env: Env, owner: Address) {
+    pub fn initialize(env: Env, owner: Address) -> Result<(), ContractError> {
+        if env.storage().instance().has(&DataKey::Owner) {
+            return Err(ContractError::AlreadyInitialized);
+        }
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage().instance().set(&DataKey::NextTokenId, &1u64);
+        Ok(())
     }
 
-    /// Get contract owner
     pub fn get_owner(env: Env) -> Address {
         env.storage().instance().get(&DataKey::Owner).unwrap()
     }
 
-    /// Authorize an issuer (institution) to issue credentials
     pub fn authorize_issuer(env: Env, issuer: Address) {
         let owner: Address = env.storage().instance().get(&DataKey::Owner).unwrap();
         owner.require_auth();
-
         env.storage()
             .instance()
             .set(&DataKey::Authorized(issuer.clone()), &true);
-
-        env.events().publish((symbol_short!("auth_ok"),), issuer);
+        env.events()
+            .publish((symbol_short!("iss_auth"),), issuer);
     }
 
-    /// Revoke issuer authorization
     pub fn revoke_issuer(env: Env, issuer: Address) {
         let owner: Address = env.storage().instance().get(&DataKey::Owner).unwrap();
         owner.require_auth();
-
         env.storage()
             .instance()
             .remove(&DataKey::Authorized(issuer.clone()));
-
-        env.events().publish((symbol_short!("revoked"),), issuer);
+        env.events()
+            .publish((symbol_short!("iss_rev"),), issuer);
     }
 
-    /// Check if an address is authorized to issue credentials
     pub fn is_authorized_issuer(env: Env, issuer: Address) -> bool {
         env.storage()
             .instance()
@@ -76,34 +83,39 @@ impl AcrediaCredential {
             .unwrap_or(false)
     }
 
-    /// Issue a new credential to a student
     pub fn issue_credential(
         env: Env,
         student: Address,
         issuer: Address,
-        credential_hash: String,
+        credential_hash: BytesN<32>,
         ipfs_uri: String,
-    ) -> u64 {
+    ) -> Result<u64, ContractError> {
         issuer.require_auth();
 
-        // Check if issuer is authorized
         let is_authorized: bool = env
             .storage()
             .instance()
             .get(&DataKey::Authorized(issuer.clone()))
             .unwrap_or(false);
         if !is_authorized {
-            panic!("Issuer not authorized");
+            return Err(ContractError::IssuerNotAuthorized);
         }
 
-        // Get next token ID
+        // Reject duplicate hashes — prevents index overwrite
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::HashIndex(credential_hash.clone()))
+        {
+            return Err(ContractError::CredentialAlreadyExists);
+        }
+
         let token_id: u64 = env
             .storage()
             .instance()
             .get(&DataKey::NextTokenId)
             .unwrap_or(1u64);
 
-        // Create and store credential
         let credential = Credential {
             token_id,
             student: student.clone(),
@@ -117,18 +129,13 @@ impl AcrediaCredential {
         env.storage()
             .persistent()
             .set(&DataKey::Credential(token_id), &credential);
-
-        // Index by credential hash for verification
         env.storage()
             .persistent()
             .set(&DataKey::HashIndex(credential_hash.clone()), &token_id);
-
-        // Update next token ID
         env.storage()
             .instance()
             .set(&DataKey::NextTokenId, &(token_id + 1));
 
-        // Update total count
         let current: u64 = env
             .storage()
             .persistent()
@@ -138,30 +145,32 @@ impl AcrediaCredential {
             .persistent()
             .set(&DataKey::TotalCredentials, &(current + 1));
 
-        // Emit event
         env.events().publish(
-            (symbol_short!("issued"), token_id, student, issuer),
-            (credential_hash, ipfs_uri),
+            (symbol_short!("cred_iss"), token_id),
+            (student, issuer, credential_hash, ipfs_uri),
         );
 
-        token_id
+        Ok(token_id)
     }
 
-    /// Revoke a credential
-    pub fn revoke_credential(env: Env, token_id: u64, issuer: Address) {
+    pub fn revoke_credential(
+        env: Env,
+        token_id: u64,
+        issuer: Address,
+    ) -> Result<(), ContractError> {
         issuer.require_auth();
 
         let mut credential: Credential = env
             .storage()
             .persistent()
             .get(&DataKey::Credential(token_id))
-            .unwrap();
+            .ok_or(ContractError::CredentialNotFound)?;
 
         if credential.issuer != issuer {
-            panic!("Only issuer can revoke");
+            return Err(ContractError::UnauthorizedRevoker);
         }
         if credential.revoked {
-            panic!("Credential already revoked");
+            return Err(ContractError::AlreadyRevoked);
         }
 
         credential.revoked = true;
@@ -171,44 +180,38 @@ impl AcrediaCredential {
 
         env.events()
             .publish((symbol_short!("cred_rev"), token_id), issuer);
+
+        Ok(())
     }
 
-    /// Get credential details by token ID
-    pub fn get_credential(env: Env, token_id: u64) -> Credential {
+    pub fn get_credential(env: Env, token_id: u64) -> Result<Credential, ContractError> {
         env.storage()
             .persistent()
             .get(&DataKey::Credential(token_id))
-            .unwrap_or_else(|| panic!("Credential not found"))
+            .ok_or(ContractError::CredentialNotFound)
     }
 
-    /// Verify credential by credential hash
-    pub fn verify_credential(env: Env, credential_hash: String) -> Option<Credential> {
-        if let Some(token_id) = env
+    pub fn verify_credential(
+        env: Env,
+        credential_hash: BytesN<32>,
+    ) -> Option<Credential> {
+        let token_id: u64 = env
             .storage()
             .persistent()
-            .get::<DataKey, u64>(&DataKey::HashIndex(credential_hash))
-        {
-            return env
-                .storage()
-                .persistent()
-                .get(&DataKey::Credential(token_id));
-        }
-        None
+            .get(&DataKey::HashIndex(credential_hash))?;
+        env.storage()
+            .persistent()
+            .get(&DataKey::Credential(token_id))
     }
 
-    /// Check if credential is revoked
     pub fn is_revoked(env: Env, token_id: u64) -> bool {
-        match env
-            .storage()
+        env.storage()
             .persistent()
             .get::<DataKey, Credential>(&DataKey::Credential(token_id))
-        {
-            Some(credential) => credential.revoked,
-            None => false,
-        }
+            .map(|c| c.revoked)
+            .unwrap_or(false)
     }
 
-    /// Get total credentials issued
     pub fn total_credentials(env: Env) -> u64 {
         env.storage()
             .persistent()
@@ -220,49 +223,278 @@ impl AcrediaCredential {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::testutils::{Address as _, Events};
+    use soroban_sdk::{vec, IntoVal};
+
+    fn setup() -> (Env, Address, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+        let owner = Address::generate(&env);
+        let issuer = Address::generate(&env);
+        let student = Address::generate(&env);
+        AcrediaCredential::initialize(env.clone(), owner.clone()).unwrap();
+        AcrediaCredential::authorize_issuer(env.clone(), issuer.clone());
+        (env, owner, issuer, student)
+    }
+
+    fn dummy_hash(env: &Env, seed: u8) -> BytesN<32> {
+        BytesN::from_array(env, &[seed; 32])
+    }
+
+    // ── initialization ────────────────────────────────────────────────────────
 
     #[test]
-    fn test_initialize() {
+    fn test_initialize_once() {
         let env = Env::default();
-        let owner = Address::random(&env);
-
-        AcrediaCredential::initialize(env.clone(), owner.clone());
-
-        let stored_owner = AcrediaCredential::get_owner(env);
-        assert_eq!(stored_owner, owner);
+        env.mock_all_auths();
+        let owner = Address::generate(&env);
+        assert!(AcrediaCredential::initialize(env.clone(), owner.clone()).is_ok());
+        assert_eq!(
+            AcrediaCredential::initialize(env, owner),
+            Err(ContractError::AlreadyInitialized)
+        );
     }
+
+    // ── issuance ──────────────────────────────────────────────────────────────
 
     #[test]
     fn test_issue_and_verify() {
-        let env = Env::default();
-        let owner = Address::random(&env);
-        let issuer = Address::random(&env);
-        let student = Address::random(&env);
+        let (env, _, issuer, student) = setup();
+        let hash = dummy_hash(&env, 1);
+        let ipfs = String::from_str(&env, "ipfs://test");
 
-        env.mock_all_auths();
+        let token_id =
+            AcrediaCredential::issue_credential(env.clone(), student.clone(), issuer, hash.clone(), ipfs)
+                .unwrap();
 
-        AcrediaCredential::initialize(env.clone(), owner.clone());
-        AcrediaCredential::authorize_issuer(env.clone(), issuer.clone());
+        assert_eq!(token_id, 1);
+        let cred = AcrediaCredential::verify_credential(env, hash).unwrap();
+        assert_eq!(cred.token_id, 1);
+        assert_eq!(cred.student, student);
+    }
 
-        let hash = String::from_str(&env, "test_hash");
-        let ipfs = String::from_str(&env, "ipfs_hash");
+    #[test]
+    fn test_duplicate_hash_rejected() {
+        let (env, _, issuer, student) = setup();
+        let hash = dummy_hash(&env, 2);
+        let ipfs = String::from_str(&env, "ipfs://a");
+
+        AcrediaCredential::issue_credential(
+            env.clone(),
+            student.clone(),
+            issuer.clone(),
+            hash.clone(),
+            ipfs.clone(),
+        )
+        .unwrap();
+
+        let result = AcrediaCredential::issue_credential(
+            env.clone(),
+            student.clone(),
+            issuer.clone(),
+            hash.clone(),
+            ipfs,
+        );
+        assert_eq!(result, Err(ContractError::CredentialAlreadyExists));
+    }
+
+    #[test]
+    fn test_unauthorized_issuer_rejected() {
+        let (env, _, _, student) = setup();
+        let rogue = Address::generate(&env);
+        let result = AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            rogue,
+            dummy_hash(&env, 3),
+            String::from_str(&env, "ipfs://x"),
+        );
+        assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+    }
+
+    // ── revocation ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_revoke_credential() {
+        let (env, _, issuer, student) = setup();
+        let hash = dummy_hash(&env, 4);
+        let token_id = AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            issuer.clone(),
+            hash,
+            String::from_str(&env, "ipfs://b"),
+        )
+        .unwrap();
+
+        assert!(!AcrediaCredential::is_revoked(env.clone(), token_id));
+        AcrediaCredential::revoke_credential(env.clone(), token_id, issuer).unwrap();
+        assert!(AcrediaCredential::is_revoked(env, token_id));
+    }
+
+    #[test]
+    fn test_double_revoke_rejected() {
+        let (env, _, issuer, student) = setup();
+        let token_id = AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            issuer.clone(),
+            dummy_hash(&env, 5),
+            String::from_str(&env, "ipfs://c"),
+        )
+        .unwrap();
+
+        AcrediaCredential::revoke_credential(env.clone(), token_id, issuer.clone()).unwrap();
+        assert_eq!(
+            AcrediaCredential::revoke_credential(env, token_id, issuer),
+            Err(ContractError::AlreadyRevoked)
+        );
+    }
+
+    #[test]
+    fn test_unauthorized_revoker_rejected() {
+        let (env, _, issuer, student) = setup();
+        let token_id = AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            issuer,
+            dummy_hash(&env, 6),
+            String::from_str(&env, "ipfs://d"),
+        )
+        .unwrap();
+
+        let rogue = Address::generate(&env);
+        assert_eq!(
+            AcrediaCredential::revoke_credential(env, token_id, rogue),
+            Err(ContractError::UnauthorizedRevoker)
+        );
+    }
+
+    #[test]
+    fn test_get_credential_not_found() {
+        let (env, _, _, _) = setup();
+        assert_eq!(
+            AcrediaCredential::get_credential(env, 999),
+            Err(ContractError::CredentialNotFound)
+        );
+    }
+
+    // ── events ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_credential_issued_event() {
+        let (env, _, issuer, student) = setup();
+        let hash = dummy_hash(&env, 7);
+        let ipfs = String::from_str(&env, "ipfs://e");
 
         let token_id = AcrediaCredential::issue_credential(
             env.clone(),
             student.clone(),
-            issuer,
+            issuer.clone(),
             hash.clone(),
-            ipfs,
+            ipfs.clone(),
+        )
+        .unwrap();
+
+        let events = env.events().all();
+        // Last event is the credential_issued one
+        let last = events.last().unwrap();
+        // topics: (symbol, token_id)
+        assert_eq!(
+            last.1,
+            vec![
+                &env,
+                symbol_short!("cred_iss").into_val(&env),
+                token_id.into_val(&env),
+            ]
         );
+    }
 
-        assert_eq!(token_id, 1);
+    #[test]
+    fn test_credential_revoked_event() {
+        let (env, _, issuer, student) = setup();
+        let token_id = AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            issuer.clone(),
+            dummy_hash(&env, 8),
+            String::from_str(&env, "ipfs://f"),
+        )
+        .unwrap();
 
-        if let Some(cred) = AcrediaCredential::verify_credential(env, hash) {
-            assert_eq!(cred.token_id, 1);
-            assert_eq!(cred.student, student);
-        } else {
-            panic!("Credential not found");
-        }
+        AcrediaCredential::revoke_credential(env.clone(), token_id, issuer.clone()).unwrap();
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        assert_eq!(
+            last.1,
+            vec![
+                &env,
+                symbol_short!("cred_rev").into_val(&env),
+                token_id.into_val(&env),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_issuer_authorized_event() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let owner = Address::generate(&env);
+        let issuer = Address::generate(&env);
+        AcrediaCredential::initialize(env.clone(), owner).unwrap();
+        AcrediaCredential::authorize_issuer(env.clone(), issuer.clone());
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        assert_eq!(
+            last.1,
+            vec![&env, symbol_short!("iss_auth").into_val(&env)]
+        );
+    }
+
+    #[test]
+    fn test_issuer_revoked_event() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let owner = Address::generate(&env);
+        let issuer = Address::generate(&env);
+        AcrediaCredential::initialize(env.clone(), owner).unwrap();
+        AcrediaCredential::authorize_issuer(env.clone(), issuer.clone());
+        AcrediaCredential::revoke_issuer(env.clone(), issuer.clone());
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        assert_eq!(
+            last.1,
+            vec![&env, symbol_short!("iss_rev").into_val(&env)]
+        );
+    }
+
+    // ── totals ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_total_credentials() {
+        let (env, _, issuer, student) = setup();
+        assert_eq!(AcrediaCredential::total_credentials(env.clone()), 0);
+
+        AcrediaCredential::issue_credential(
+            env.clone(),
+            student.clone(),
+            issuer.clone(),
+            dummy_hash(&env, 9),
+            String::from_str(&env, "ipfs://g"),
+        )
+        .unwrap();
+        AcrediaCredential::issue_credential(
+            env.clone(),
+            student,
+            issuer,
+            dummy_hash(&env, 10),
+            String::from_str(&env, "ipfs://h"),
+        )
+        .unwrap();
+
+        assert_eq!(AcrediaCredential::total_credentials(env), 2);
     }
 }
