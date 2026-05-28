@@ -316,16 +316,13 @@ mod tests {
     #[test]
     fn test_initialize() {
         let env = Env::default();
+        let contract_id = env.register_contract(None, AcrediaCredential);
+        let client = AcrediaCredentialClient::new(&env, &contract_id);
         let owner = Address::generate(&env);
-        let client = create_client(&env);
-
-        env.mock_all_auths();
 
         client.initialize(&owner);
 
         let stored_owner = client.get_owner();
-        let pending_owner = client.get_pending_owner();
-
         assert_eq!(stored_owner, owner);
         assert_eq!(pending_owner, None);
     }
@@ -370,10 +367,11 @@ mod tests {
     #[test]
     fn test_issue_and_verify() {
         let env = Env::default();
+        let contract_id = env.register_contract(None, AcrediaCredential);
+        let client = AcrediaCredentialClient::new(&env, &contract_id);
         let owner = Address::generate(&env);
         let issuer = Address::generate(&env);
         let student = Address::generate(&env);
-        let client = create_client(&env);
 
         env.mock_all_auths();
 
