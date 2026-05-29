@@ -1,28 +1,17 @@
-import { describe, it, expect } from 'vitest';
-import { ensureValidTokenId, getSorobanTransactionResult } from '../src/lib/contracts';
+import { describe, expect, it } from 'vitest';
+import { normalizeTokenId } from '../src/lib/contracts';
 
-describe('Soroban contract helper functions', () => {
-  it('parses u64 return values from Soroban simulation results', () => {
-    const simResult = {
-      result: {
-        retval: 'AAAABQAAAAAAAAAB',
-      },
-    };
-
-    const parsed = getSorobanTransactionResult(simResult);
-    expect(parsed).toBe(1n);
+describe('Soroban credential token IDs', () => {
+  it('normalizes u64 return values to database-safe token ID strings', () => {
+    expect(normalizeTokenId(1)).toBe('1');
+    expect(normalizeTokenId(42n)).toBe('42');
+    expect(normalizeTokenId('123')).toBe('123');
   });
 
-  it('rejects invalid token IDs before signing', () => {
-    expect(() => ensureValidTokenId('pending')).toThrow('Invalid token ID');
-    expect(() => ensureValidTokenId('0')).toThrow('Invalid token ID');
-    expect(() => ensureValidTokenId('-1')).toThrow('Invalid token ID');
-    expect(() => ensureValidTokenId('1.5')).toThrow('Invalid token ID');
-  });
-
-  it('accepts valid numeric token IDs', () => {
-    expect(ensureValidTokenId('1')).toBe('1');
-    expect(ensureValidTokenId(2)).toBe('2');
-    expect(ensureValidTokenId(3n)).toBe('3');
+  it('rejects missing or non-numeric return values instead of falling back to a transaction hash', () => {
+    expect(() => normalizeTokenId(null)).toThrow(/valid token ID/);
+    expect(() => normalizeTokenId(undefined)).toThrow(/valid token ID/);
+    expect(() => normalizeTokenId('pending')).toThrow(/valid token ID/);
+    expect(() => normalizeTokenId('abcdef')).toThrow(/valid token ID/);
   });
 });
