@@ -1,39 +1,27 @@
 import { debugLog } from './debug';
 
-const PINATA_JWT = process.env.NEXT_PUBLIC_PINATA_JWT || '';
 const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud';
+const IPFS_FILE_ROUTE = '/api/ipfs/file';
+const IPFS_JSON_ROUTE = '/api/ipfs/json';
 
 export async function uploadToIPFS(file: File): Promise<string> {
-    if (!PINATA_JWT) {
-        throw new Error(
-            'Pinata JWT not configured. Please set NEXT_PUBLIC_PINATA_JWT in your .env.local file. ' +
-                'Get a free API key at https://pinata.cloud'
-        );
-    }
-
     try {
         const formData = new FormData();
-        formData.append('file', file);
-        formData.append('pinataMetadata', JSON.stringify({ name: file.name }));
-        formData.append('pinataOptions', JSON.stringify({ cidVersion: 1 }));
+        formData.append('file', file, file.name);
 
-        const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+        const response = await fetch(IPFS_FILE_ROUTE, {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${PINATA_JWT}`,
-            },
             body: formData,
         });
 
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error('Pinata API error:', response.status, errorBody);
-            throw new Error(`IPFS upload failed (${response.status}): ${response.statusText}`);
+        const payload = await response.json();
+
+        if (!response.ok || !payload?.cid) {
+            throw new Error(payload?.error || 'IPFS upload failed');
         }
 
-        const result = await response.json();
-        const cid = result.IpfsHash;
-        debugLog('File uploaded to IPFS via Pinata.');
+        const cid = payload.cid as string;
+        debugLog('File uploaded to IPFS via server IPFS route.');
         return cid;
     } catch (error: any) {
         console.error('Error uploading file to IPFS:', error);
@@ -42,36 +30,23 @@ export async function uploadToIPFS(file: File): Promise<string> {
 }
 
 export async function uploadJSONToIPFS(data: any): Promise<string> {
-    if (!PINATA_JWT) {
-        throw new Error(
-            'Pinata JWT not configured. Please set NEXT_PUBLIC_PINATA_JWT in your .env.local file. ' +
-                'Get a free API key at https://pinata.cloud'
-        );
-    }
-
     try {
-        const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+        const response = await fetch(IPFS_JSON_ROUTE, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${PINATA_JWT}`,
             },
-            body: JSON.stringify({
-                pinataMetadata: { name: 'credential-metadata.json' },
-                pinataOptions: { cidVersion: 1 },
-                pinataContent: data,
-            }),
+            body: JSON.stringify({ content: data }),
         });
 
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error('Pinata API error:', response.status, errorBody);
-            throw new Error(`IPFS JSON upload failed (${response.status}): ${response.statusText}`);
+        const payload = await response.json();
+
+        if (!response.ok || !payload?.cid) {
+            throw new Error(payload?.error || 'IPFS JSON upload failed');
         }
 
-        const result = await response.json();
-        const cid = result.IpfsHash;
-        debugLog('JSON uploaded to IPFS via Pinata.');
+        const cid = payload.cid as string;
+        debugLog('JSON uploaded to IPFS via server IPFS route.');
         return cid;
     } catch (error: any) {
         console.error('Error uploading JSON to IPFS:', error);
