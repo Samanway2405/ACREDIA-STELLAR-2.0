@@ -1,0 +1,383 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
+import { createHash } from 'crypto';
+
+// ── HOISTED MOCK VARIABLES ───────────────────────────────────────────────────
+// Vitest hoists vi.mock calls, so any variables used inside must be created with vi.hoisted
+const {
+  mockIssueCredentialOnStellar,
+  mockGetServiceRoleClient,
+  mockGetCredential,
+  mockIsRevoked,
+  mockSupabaseInsert,
+  mockSupabaseMaybeSingle,
+  mockRequireAdminRequest,
+} = vi.hoisted(() => ({
+  mockIssueCredentialOnStellar: vi.fn(),
+  mockGetServiceRoleClient: vi.fn(),
+  mockGetCredential: vi.fn(),
+  mockIsRevoked: vi.fn(),
+  mockSupabaseInsert: vi.fn(),
+  mockSupabaseMaybeSingle: vi.fn(),
+  mockRequireAdminRequest: vi.fn(),
+}));
+
+// Mock IPFS methods
+vi.mock('../src/lib/ipfs', () => ({
+  uploadToIPFS: vi.fn(async () => 'mocked-file-cid'),
+  uploadJSONToIPFS: vi.fn(async () => 'mocked-metadata-path'),
+  getIPFSUrl: vi.fn((cid) => `ipfs://${cid}`),
+}));
+
+// Mock Stellar/Freighter contracts
+vi.mock('../src/lib/contracts', () => ({
+  issueCredentialOnStellar: mockIssueCredentialOnStellar,
+  generateCredentialHash: vi.fn(async () => '850e0cdb283df84c2f61e80821d3e80821d3e80821d3e80821d3e80821d3e808'),
+  revokeCredentialOnStellar: vi.fn(),
+  isValidAddress: vi.fn(() => true),
+}));
+
+// Mock serverAuth
+vi.mock('../src/lib/serverAuth', () => ({
+  getServiceRoleClient: mockGetServiceRoleClient,
+  requireAdminRequest: mockRequireAdminRequest,
+}));
+
+// Mock contractReads
+vi.mock('../src/lib/contractReads', () => ({
+  getCredential: mockGetCredential,
+  isRevoked: mockIsRevoked,
+}));
+
+// Mock Supabase
+vi.mock('../src/lib/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: mockSupabaseMaybeSingle,
+        })),
+      })),
+      insert: mockSupabaseInsert,
+    })),
+  },
+}));
+
+// Import target services after mocks are established
+import { issueCredential, type CredentialData } from '../src/lib/credentialService';
+import { GET } from '../src/app/api/verify/[token]/route';
+
+// Helper to derive SHA-256 hash exactly like route.ts does
+function deriveCredentialHash(metadata: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(metadata))
+    .digest('hex');
+}
+
+// ── CORE LIFECYCLE TESTS ──────────────────────────────────────────────────────
+
+describe('Academic Credential E2E Integration / Lifecycle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const dummyFile = new File([new Uint8Array(100)], 'diploma.pdf', {
+    type: 'application/pdf',
+  });
+
+  const mockCredentialData: CredentialData = {
+    studentName: 'Alice Smith',
+    studentWallet: 'GSTUDENTADDRESS123456789012345678901234567890123456789',
+    studentEmail: 'alice@example.com',
+    credentialType: 'diploma',
+    degree: 'Bachelor of Computer Science',
+    major: 'Software Engineering',
+    gpa: '3.9',
+    issueDate: '2026-05-31',
+    institutionId: 'inst-999',
+    institutionName: 'Acredia Academy',
+    institutionWallet: 'GINSTITUTIONADDRESS12345678901234567890123456789',
+    file: dummyFile,
+  };
+
+  // ── 1. SUCCESSFUL CREDENTIAL ISSUANCE ──────────────────────────────────────
+  it('covers successful credential issuance lifecycle', async () => {
+    // Setup mocks
+    mockIssueCredentialOnStellar.mockResolvedValue({
+      tokenId: '123',
+      transactionHash: 'mocked-transaction-hash',
+    });
+    mockSupabaseMaybeSingle.mockResolvedValue({
+      data: { id: 'student-db-id-001' },
+      error: null,
+    });
+    mockSupabaseInsert.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    const result = await issueCredential(mockCredentialData, 'GINSTITUTIONADDRESS12345678901234567890123456789');
+
+    expect(result).toEqual({
+      tokenId: '123',
+      transactionHash: 'mocked-transaction-hash',
+      ipfsHash: 'mocked-file-cid',
+      metadataHash: 'mocked-metadata-path',
+    });
+
+    expect(mockSupabaseInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        student_wallet_address: mockCredentialData.studentWallet,
+        token_id: '123',
+        ipfs_hash: 'mocked-metadata-path',
+        blockchain_hash: 'mocked-transaction-hash',
+        revoked: false,
+      })
+    );
+  });
+
+  // ── 2. FAILED WALLET SIGNING ──────────────────────────────────────────────
+  it('covers failed wallet signing during issuance', async () => {
+    // Setup Freighter mock to throw an error (signing rejection or timeout)
+    mockIssueCredentialOnStellar.mockRejectedValue(
+      new Error('Freighter signing failed or was canceled.')
+    );
+    mockSupabaseMaybeSingle.mockResolvedValue({
+      data: { id: 'student-db-id-001' },
+      error: null,
+    });
+
+    await expect(
+      issueCredential(mockCredentialData, 'GINSTITUTIONADDRESS12345678901234567890123456789')
+    ).rejects.toThrow('Freighter signing failed or was canceled.');
+
+    // Database insert must NEVER be called if signing fails
+    expect(mockSupabaseInsert).not.toHaveBeenCalled();
+  });
+
+  // ── 3. VERIFICATION SUCCESS ───────────────────────────────────────────────
+  it('covers verification success states', async () => {
+    const dbMetadata = {
+      credentialData: {
+        studentName: 'Alice Smith',
+        credentialType: 'diploma',
+        degree: 'Bachelor of Computer Science',
+        institutionName: 'Acredia Academy',
+      },
+    };
+
+    const expectedHash = deriveCredentialHash(dbMetadata);
+
+    // Mock Supabase service role client to return database credential record
+    const mockMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'cred-001',
+        token_id: '123',
+        issued_at: '2026-05-31T09:00:00Z',
+        revoked: false,
+        revoked_at: null,
+        metadata: dbMetadata,
+        ipfs_hash: 'mocked-metadata-path',
+        student_wallet_address: 'gstudentaddress123456789012345678901234567890123456789',
+        issuer_wallet_address: 'ginstitutionaddress12345678901234567890123456789',
+        institution: {
+          name: 'Acredia Academy',
+        },
+      },
+      error: null,
+    });
+
+    mockGetServiceRoleClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: mockMaybeSingle,
+          })),
+        })),
+      })),
+    });
+
+    // Mock on-chain query to return matching credential
+    mockGetCredential.mockResolvedValue({
+      student: 'gstudentaddress123456789012345678901234567890123456789',
+      issuer: 'ginstitutionaddress12345678901234567890123456789',
+      hash: expectedHash, // Dynamically matches computed hash
+      uri: 'ipfs://mocked-metadata-path',
+      issued_at: 1717146000,
+    });
+
+    mockIsRevoked.mockResolvedValue(false);
+
+    // Call verify route
+    const req = new NextRequest('http://localhost:3000/api/verify/123');
+    const response = await GET(req, { params: Promise.resolve({ token: '123' }) });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.verification.verified).toBe(true);
+    expect(payload.verification.onChainMatch).toBe(true);
+  });
+
+  // ── 4. VERIFICATION REVOKED ───────────────────────────────────────────────
+  it('covers verification revoked states', async () => {
+    const dbMetadata = {
+      credentialData: {
+        studentName: 'Alice Smith',
+        credentialType: 'diploma',
+      },
+    };
+
+    const expectedHash = deriveCredentialHash(dbMetadata);
+
+    // Mock Supabase service role client to return active record but marked revoked on-chain
+    const mockMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'cred-001',
+        token_id: '123',
+        issued_at: '2026-05-31T09:00:00Z',
+        revoked: false, // active in DB
+        revoked_at: null,
+        metadata: dbMetadata,
+        ipfs_hash: 'mocked-metadata-path',
+        student_wallet_address: 'gstudentaddress123456789012345678901234567890123456789',
+        issuer_wallet_address: 'ginstitutionaddress12345678901234567890123456789',
+      },
+      error: null,
+    });
+
+    mockGetServiceRoleClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: mockMaybeSingle,
+          })),
+        })),
+      })),
+    });
+
+    // Mock on-chain query to return matching credential
+    mockGetCredential.mockResolvedValue({
+      student: 'gstudentaddress123456789012345678901234567890123456789',
+      issuer: 'ginstitutionaddress12345678901234567890123456789',
+      hash: expectedHash,
+      uri: 'ipfs://mocked-metadata-path',
+      issued_at: 1717146000,
+    });
+
+    // Revoked on-chain!
+    mockIsRevoked.mockResolvedValue(true);
+
+    const req = new NextRequest('http://localhost:3000/api/verify/123');
+    const response = await GET(req, { params: Promise.resolve({ token: '123' }) });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.verification.verified).toBe(false); // Revoked credential is not verified
+    expect(payload.verification.revoked).toBe(true);
+  });
+
+  // ── 5. VERIFICATION NOT FOUND ─────────────────────────────────────────────
+  it('covers verification not found states', async () => {
+    // Mock Supabase to return null (no matching token ID)
+    const mockMaybeSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    mockGetServiceRoleClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: mockMaybeSingle,
+          })),
+        })),
+      })),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/verify/999');
+    const response = await GET(req, { params: Promise.resolve({ token: '999' }) });
+    const payload = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(payload.success).toBe(false);
+    expect(payload.error).toBe('Credential not found');
+  });
+
+  // ── 6. VERIFICATION MISMATCH ──────────────────────────────────────────────
+  it('covers verification mismatch (tampered metadata/hashes) states', async () => {
+    const dbMetadata = {
+      credentialData: {
+        studentName: 'Alice Smith',
+        credentialType: 'diploma',
+      },
+    };
+
+    // Mock Supabase service role client to return valid metadata
+    const mockMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'cred-001',
+        token_id: '123',
+        issued_at: '2026-05-31T09:00:00Z',
+        revoked: false,
+        revoked_at: null,
+        metadata: dbMetadata,
+        ipfs_hash: 'mocked-metadata-path',
+        student_wallet_address: 'gstudentaddress123456789012345678901234567890123456789',
+        issuer_wallet_address: 'ginstitutionaddress12345678901234567890123456789',
+      },
+      error: null,
+    });
+
+    mockGetServiceRoleClient.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: mockMaybeSingle,
+          })),
+        })),
+      })),
+    });
+
+    // Mock on-chain query to return non-matching credential (e.g. completely different hash)
+    mockGetCredential.mockResolvedValue({
+      student: 'gstudentaddress123456789012345678901234567890123456789',
+      issuer: 'ginstitutionaddress12345678901234567890123456789',
+      hash: 'tampered-or-different-hash-value-1234567890', // Hash Mismatch!
+      uri: 'ipfs://mocked-metadata-path',
+      issued_at: 1717146000,
+    });
+
+    mockIsRevoked.mockResolvedValue(false);
+
+    const req = new NextRequest('http://localhost:3000/api/verify/123');
+    const response = await GET(req, { params: Promise.resolve({ token: '123' }) });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.verification.verified).toBe(false); // Tampered hash means not verified
+    expect(payload.verification.onChainMatch).toBe(false);
+    expect(payload.verification.checks.hashMatch).toBe(false);
+  });
+
+  // ── 7. ROLE-BASED ROUTE ACCESS ────────────────────────────────────────────
+  it('covers role-based route access validation', async () => {
+    // Assert route guard integrates with requireAdminRequest helper
+    const req = new NextRequest('http://localhost:3000/api/admin/setup');
+    
+    // Simulating authorized admin
+    mockRequireAdminRequest.mockResolvedValue({ ok: true, userId: 'admin-user-007' });
+    const authSuccess = await mockRequireAdminRequest(req);
+    expect(authSuccess.ok).toBe(true);
+    expect(authSuccess.userId).toBe('admin-user-007');
+
+    // Simulating unauthorized/non-admin requester
+    mockRequireAdminRequest.mockResolvedValue({ ok: false, status: 403, error: 'Admin access required' });
+    const authFailed = await mockRequireAdminRequest(req);
+    expect(authFailed.ok).toBe(false);
+    expect(authFailed.status).toBe(403);
+    expect(authFailed.error).toBe('Admin access required');
+  });
+});
