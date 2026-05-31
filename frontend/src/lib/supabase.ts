@@ -32,6 +32,15 @@ async function clearLocalAuthSession() {
     }
 }
 
+function shouldRefreshSession(expiresAt?: number): boolean {
+    if (!expiresAt) {
+        return false;
+    }
+
+    // Refresh shortly before expiry so API routes do not receive a stale token.
+    return expiresAt * 1000 - Date.now() < 60 * 1000;
+}
+
 export async function safeGetSession() {
     try {
         const { data, error } = await supabase.auth.getSession();
@@ -39,6 +48,17 @@ export async function safeGetSession() {
         if (error && isInvalidRefreshTokenError(error)) {
             await clearLocalAuthSession();
             return { data: { session: null }, error: null };
+        }
+
+        if (data.session && shouldRefreshSession(data.session.expires_at)) {
+            const refreshed = await supabase.auth.refreshSession();
+
+            if (refreshed.error && isInvalidRefreshTokenError(refreshed.error)) {
+                await clearLocalAuthSession();
+                return { data: { session: null }, error: null };
+            }
+
+            return refreshed;
         }
 
         return { data, error };

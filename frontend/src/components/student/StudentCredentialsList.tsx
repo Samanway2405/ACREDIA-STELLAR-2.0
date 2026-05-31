@@ -82,20 +82,44 @@ export default function StudentCredentialsList({
 
             const {
                 data: { session },
+                error: sessionError,
             } = await safeGetSession();
 
-            if (!session?.access_token) {
+            if (sessionError) {
+                throw new Error('Failed to refresh your session');
+            }
+
+            let accessToken = session?.access_token;
+
+            if (!accessToken) {
                 setCredentials([]);
                 return;
             }
 
-            const response = await fetch('/api/student/credentials', {
+            let response = await fetch('/api/student/credentials', {
                 headers: {
-                    Authorization: `Bearer ${session.access_token}`,
+                    Authorization: `Bearer ${accessToken}`,
                 },
             });
 
-            const payload = await response.json();
+            let payload = await response.json();
+
+            if (response.status === 401 && payload?.error === 'Invalid or expired access token') {
+                const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+                accessToken = refreshed.session?.access_token;
+
+                if (refreshError || !accessToken) {
+                    throw new Error('Your session expired. Please sign in again.');
+                }
+
+                response = await fetch('/api/student/credentials', {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                });
+                payload = await response.json();
+            }
+
             if (!response.ok || !payload?.success) {
                 throw new Error(payload?.error || 'Failed to load credentials');
             }
