@@ -1,0 +1,74 @@
+name: Bug or Setup Issue
+description: Report a reproducible bug, setup problem, or stale documentation.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area label
+      description: Choose the closest project area label.
+      options:
+        - frontend
+        - contracts
+        - database
+        - docs
+        - ci
+    validations:
+      required: true
+  - type: textarea
+    id: affected-paths
+    attributes:
+      label: Affected file paths
+      description: List exact files or folders, for example `frontend/src/lib/contracts.ts`.
+      placeholder: |
+        frontend/src/...
+        contracts/src/...
+        README.md
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup steps
+      description: Paste the commands and environment setup you used from a clean clone.
+      placeholder: |
+        git clone ...
+        cd ACREDIA-STELLAR/frontend
+        npm install
+        Copy-Item .env.local.example .env.local
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Write the smallest steps needed to reproduce the issue.
+      placeholder: |
+        1. Sign in as ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include errors, logs, or screenshots if useful.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, npm version, browser, wallet/network.
+      placeholder: "Windows 11, Node 20, npm 10, Chrome, Freighter testnet"
+    validations:
+      required: true

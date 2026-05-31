@@ -331,7 +331,7 @@ All deployments, metadata hashes, and transaction executions can be publicly ver
 
 ### Development Tools
 
-- **pnpm** - Fast, disk-efficient package manager
+- **npm** - Package manager used by `frontend/package-lock.json`
 - **ESLint** - Code quality
 - **Prettier** - Code formatting
 - **Git** - Version control
@@ -503,6 +503,18 @@ sequenceDiagram
 
 ### Quick Start Guide
 
+Copy-paste local setup:
+
+```powershell
+git clone https://github.com/Sumanpradhan1706/ACREDIA-STELLAR.git
+cd ACREDIA-STELLAR\frontend
+npm install
+Copy-Item .env.local.example .env.local
+npm run dev
+```
+
+Then fill `.env.local`, run the Supabase SQL scripts below, and open [http://localhost:3000](http://localhost:3000).
+
 > **TL;DR**: Install Stellar CLI → Set up test account → Clone repo → Install dependencies → Configure `.env` files → Deploy Soroban contracts → Run frontend
 
 ### Prerequisites
@@ -510,7 +522,7 @@ sequenceDiagram
 Before you begin, ensure you have the following installed:
 
 - **Node.js** (v18 or higher) - [Download](https://nodejs.org/)
-- **pnpm** (v8 or higher) - Install via: `npm install -g pnpm`
+- **npm** (bundled with Node.js) - this repo includes `frontend/package-lock.json`
 - **Git** - [Download](https://git-scm.com/)
 - **Stellar CLI** - [Install Guide](https://developers.stellar.org/docs/build/guides/cli/install)
 - **Rust** (for Soroban contracts) - [Install](https://www.rust-lang.org/tools/install)
@@ -529,7 +541,7 @@ cd ACREDIA-STELLAR
 
 ```powershell
 cd frontend
-pnpm install
+npm install
 ```
 
 3. **Install Contract Build Toolchain**
@@ -575,6 +587,13 @@ ADMIN_EMAIL_ALLOWLIST=admin@example.com
 PINATA_JWT=your_pinata_jwt_token
 # Optional: custom Pinata gateway domain
 # NEXT_PUBLIC_PINATA_GATEWAY=https://your-gateway.mypinata.cloud
+```
+
+You can also copy the canonical example:
+
+```powershell
+cd frontend
+Copy-Item .env.local.example .env.local
 ```
 
 Create a `.env` file in the `contracts` directory:
@@ -665,7 +684,7 @@ stellar contract invoke \
 
 ```powershell
 cd frontend
-pnpm dev
+npm run dev
 ```
 
 9. **Open in Browser**
@@ -676,9 +695,11 @@ Navigate to [http://localhost:3000](http://localhost:3000)
 
 ```powershell
 cd frontend
-pnpm build
-pnpm start
+npm run build
+npm start
 ```
+
+> **Production warning**: Keep `SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, and any Stellar secret keys server-only. Never put private keys or service-role values in `NEXT_PUBLIC_*` variables, browser code, screenshots, or issues.
 
 ---
 
@@ -703,10 +724,9 @@ pnpm start
 3. Get your project URL and anon key from Settings > API
 4. Run the provided SQL scripts in SQL Editor (in order):
    - `frontend/sql/database_schema.sql`
-   - `frontend/sql/FIX_DATABASE_RLS.sql`
-   - `frontend/sql/enable_public_verification.sql`
-   - `frontend/sql/enable_admin_stats.sql`
-   - `frontend/sql/add_profiles_table.sql`
+   - `frontend/sql/secure_rls_migration.sql`
+
+The older repair scripts are kept for legacy deployments only. For a clean clone, use the two scripts above.
 
 #### Stellar Account Setup
 
@@ -1013,7 +1033,7 @@ cargo build --target wasm32-unknown-unknown --release
 
 # Frontend tests (if configured)
 cd frontend
-pnpm test
+npm test
 ```
 
 ### Testing on Stellar Testnet
@@ -1169,6 +1189,7 @@ For questions, feedback, or support:
 
 - Open an issue on [GitHub Issues](https://github.com/Sumanpradhan1706/Acredia-stellar/issues)
 - Check existing issues for solutions
+- Include setup steps, affected file paths, expected behavior, actual behavior, and labels such as `bug`, `docs`, `frontend`, `contracts`, or `database`.
 
 ---
 
