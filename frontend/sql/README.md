@@ -16,3 +16,5 @@ The other SQL files in this directory are superseded repair scripts kept for leg
 - `enable_public_verification.sql`
 
 After running the two canonical scripts, test the app with student, institution, admin, and public verification flows.
+
+Admin profiles should be promoted only by a trusted server-side/service-role process. Do not rely on client signup metadata for admin access.
