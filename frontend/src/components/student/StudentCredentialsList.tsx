@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import QRCodeModal from './QRCodeModal';
 import { getIPFSUrl } from '@/lib/ipfs';
 import { debugLog } from '@/lib/debug';
-import { safeGetSession } from '@/lib/supabase';
+import { safeGetSession, supabase } from '@/lib/supabase';
 
 interface Credential {
     id: string;
@@ -73,6 +73,13 @@ export default function StudentCredentialsList({
                 return;
             }
 
+            if (studentWallet) {
+                await supabase
+                    .from('students')
+                    .update({ wallet_address: studentWallet })
+                    .eq('auth_user_id', studentId);
+            }
+
             const {
                 data: { session },
                 error: sessionError,
@@ -87,22 +94,6 @@ export default function StudentCredentialsList({
             if (!accessToken) {
                 setCredentials([]);
                 return;
-            }
-
-            if (studentWallet) {
-                const linkResponse = await fetch('/api/student/wallet', {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ walletAddress: studentWallet }),
-                });
-
-                const linkPayload = await linkResponse.json().catch(() => null);
-                if (!linkResponse.ok || !linkPayload?.success) {
-                    throw new Error(linkPayload?.error || 'Failed to link wallet address');
-                }
             }
 
             let response = await fetch('/api/student/credentials', {
