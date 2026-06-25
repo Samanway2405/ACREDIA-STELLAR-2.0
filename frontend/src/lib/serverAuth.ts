@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
+import { resolveUserRole } from './roleResolver';
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -106,21 +108,9 @@ export async function requireAdminRequest(request: NextRequest): Promise<
         };
     }
 
-    const { data: profile, error: profileError } = await serviceClient
-        .from('profiles')
-        .select('role')
-        .eq('id', authCheck.userId)
-        .maybeSingle();
+    const role = await resolveUserRole(serviceClient, authUser.user);
 
-    if (profileError) {
-        return {
-            ok: false,
-            status: 500,
-            error: 'Failed to resolve user role',
-        };
-    }
-
-    if (!profile || profile.role !== 'admin') {
+    if (role !== 'admin') {
         return {
             ok: false,
             status: 403,
