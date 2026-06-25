@@ -5,8 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { safeGetSession } from '@/lib/supabase';
-import { normalizePublicSignupRole } from '@/lib/adminAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import {
     Shield,
     Globe,
@@ -30,27 +29,9 @@ import {
 
 export default function AboutPage() {
     const [showSolutions, setShowSolutions] = useState(false);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [userRole, setUserRole] = useState<string | null>(null);
+    const { user, userRole } = useAuth();
     const router = useRouter();
     let closeTimeout: NodeJS.Timeout;
-
-    useEffect(() => {
-        checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
-        try {
-            const { data: { session } } = await safeGetSession();
-            setIsAuthenticated(!!session);
-            if (session?.user) {
-                setUserRole(normalizePublicSignupRole(session.user.user_metadata?.role));
-            }
-        } catch {
-            setIsAuthenticated(false);
-            setUserRole(null);
-        }
-    };
 
     const handleMouseEnter = () => {
         if (closeTimeout) clearTimeout(closeTimeout);

@@ -6,8 +6,7 @@ import { Card } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { safeGetSession } from '@/lib/supabase';
-import { normalizePublicSignupRole } from '@/lib/adminAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Shield,
   CheckCircle,
@@ -34,27 +33,9 @@ export default function Home() {
   const [showSolutions, setShowSolutions] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileSolutionsOpen, setMobileSolutionsOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { user, userRole } = useAuth();
   const router = useRouter();
   let closeTimeout: NodeJS.Timeout;
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const { data: { session } } = await safeGetSession();
-      setIsAuthenticated(!!session);
-      if (session?.user) {
-        setUserRole(normalizePublicSignupRole(session.user.user_metadata?.role));
-      }
-    } catch {
-      setIsAuthenticated(false);
-      setUserRole(null);
-    }
-  };
 
   const handleDashboardClick = (e: React.MouseEvent, dashboardType: 'student' | 'institution') => {
     e.preventDefault();

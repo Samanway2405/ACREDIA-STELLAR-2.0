@@ -4,75 +4,41 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, signOut, safeGetSession } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { normalizePublicSignupRole } from '@/lib/adminAccess';
+import { resolveUserRoleClient } from '@/lib/roleResolver';
+import type { AppRole, RoleState } from '@/types';
 
 interface AuthContextType {
     user: User | null;
     loading: boolean;
-    userRole: 'institution' | 'student' | 'admin' | null;
+    userRole: RoleState;
     signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
     user: null,
     loading: true,
-    userRole: null,
+    userRole: 'loading',
     signOut: async () => { },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [userRole, setUserRole] = useState<'institution' | 'student' | 'admin' | null>(null);
+    const [userRole, setUserRole] = useState<RoleState>('loading');
 
-    const resolveUserRole = async (nextUser: User | null) => {
+    const resolveRole = async (nextUser: User | null) => {
         if (!nextUser) {
-            setUserRole(null);
+            setUserRole('unknown');
             return;
         }
 
-        const metadataRole = nextUser.user_metadata?.role;
-        if (metadataRole) {
-            setUserRole(normalizePublicSignupRole(metadataRole));
-            return;
+        try {
+            const role = await resolveUserRoleClient(supabase, nextUser);
+            setUserRole(role);
+        } catch {
+            // Keep the app usable if resolution fails — fall back to unknown.
+            setUserRole('unknown');
         }
-
-        // Fallback role resolution for environments where metadata role is missing.
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', nextUser.id)
-            .maybeSingle();
-
-        if (profile?.role === 'admin' || profile?.role === 'institution' || profile?.role === 'student') {
-            setUserRole(profile.role);
-            return;
-        }
-
-        const { data: institutionRow } = await supabase
-            .from('institutions')
-            .select('id')
-            .eq('auth_user_id', nextUser.id)
-            .maybeSingle();
-
-        if (institutionRow?.id) {
-            setUserRole('institution');
-            return;
-        }
-
-        const { data: studentRow } = await supabase
-            .from('students')
-            .select('id')
-            .eq('auth_user_id', nextUser.id)
-            .maybeSingle();
-
-        if (studentRow?.id) {
-            setUserRole('student');
-            return;
-        }
-
-        // Keep app usable if role data is absent.
-        setUserRole('student');
     };
 
     useEffect(() => {
@@ -80,11 +46,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         safeGetSession().then(({ data: { session } }) => {
             const nextUser = session?.user ?? null;
             setUser(nextUser);
-            resolveUserRole(nextUser).catch(() => setUserRole(nextUser ? 'student' : null));
+            resolveRole(nextUser);
             setLoading(false);
         }).catch(() => {
             setUser(null);
-            setUserRole(null);
+            setUserRole('unknown');
             setLoading(false);
         });
 
@@ -94,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } = supabase.auth.onAuthStateChange((_event, session) => {
             const nextUser = session?.user ?? null;
             setUser(nextUser);
-            resolveUserRole(nextUser).catch(() => setUserRole(nextUser ? 'student' : null));
+            resolveRole(nextUser);
             setLoading(false);
         });
 
@@ -104,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleSignOut = async () => {
         await signOut();
         setUser(null);
-        setUserRole(null);
+        setUserRole('unknown');
     };
 
     return (
@@ -135,7 +101,7 @@ export function ProtectedRoute({
     allowedRoles,
 }: {
     children: React.ReactNode;
-    allowedRoles?: ('institution' | 'student' | 'admin')[];
+    allowedRoles?: AppRole[];
 }) {
     const { user, loading, userRole } = useAuth();
     const router = useRouter();
@@ -149,7 +115,8 @@ export function ProtectedRoute({
             !loading &&
             user &&
             allowedRoles &&
-            userRole &&
+            userRole !== 'loading' &&
+            userRole !== 'unknown' &&
             !allowedRoles.includes(userRole)
         ) {
             router.push('/dashboard');
@@ -168,7 +135,7 @@ export function ProtectedRoute({
         return null;
     }
 
-    if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
+    if (allowedRoles && userRole !== 'loading' && userRole !== 'unknown' && !allowedRoles.includes(userRole)) {
         return null;
     }
 
