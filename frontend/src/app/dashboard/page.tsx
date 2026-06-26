@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { debugLog, debugWarn } from '@/lib/debug';
-import { supabase } from '@/lib/supabase';
+import { safeGetSession, supabase } from '@/lib/supabase';
 import { useStellarAccount } from '@/contexts/StellarContext';
 import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
 
@@ -112,23 +112,34 @@ function DashboardContent() {
             setLinkingInstitutionWallet(true);
 
             try {
-                const { error } = await supabase
-                    .from('institutions')
-                    .update({
-                        wallet_address: address,
-                        verified: false,
-                        authorization_tx_hash: null,
-                    })
-                    .eq('id', institutionId)
-                    .eq('auth_user_id', user.id);
+                const {
+                    data: { session },
+                    error: sessionError,
+                } = await safeGetSession();
 
-                if (error) {
-                    throw error;
+                if (sessionError || !session?.access_token) {
+                    throw new Error('Your session expired. Please sign in again.');
                 }
 
-                setInstitutionWalletAddress(address);
+                const response = await fetch('/api/institution/link-wallet', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ walletAddress: address }),
+                });
+                const payload = await response.json();
+
+                if (!response.ok || !payload?.success) {
+                    throw new Error(payload?.error || 'Failed to link institution wallet');
+                }
+
+                setInstitutionWalletAddress(payload.walletAddress || address);
                 debugLog('Connected wallet linked to institution profile.');
-                toast.success('Institution wallet linked');
+                if (payload.changed) {
+                    toast.success('Institution wallet linked');
+                }
             } catch (error) {
                 console.error('Error linking institution wallet:', error);
                 toast.error('Failed to link connected wallet to your institution');
