@@ -347,9 +347,9 @@ export async function getInstitutionCredentialsPaginated(
     const term = filters.search.trim();
     query = query.or(
       `token_id.ilike.%${term}%,` +
-      `metadata->>studentName.ilike.%${term}%,` +
-      `metadata->>degree.ilike.%${term}%,` +
-      `metadata->>credentialType.ilike.%${term}%`
+      `metadata->credentialData->>studentName.ilike.%${term}%,` +
+      `metadata->credentialData->>degree.ilike.%${term}%,` +
+      `metadata->credentialData->>credentialType.ilike.%${term}%`
     );
   }
 
@@ -393,9 +393,9 @@ export async function getStudentCredentialsPaginated(
   if (filters.search?.trim()) {
     const term = filters.search.trim();
     query = query.or(
-      `metadata->>institutionName.ilike.%${term}%,` +
-      `metadata->>credentialType.ilike.%${term}%,` +
-      `metadata->>degree.ilike.%${term}%,` +
+      `metadata->credentialData->>institutionName.ilike.%${term}%,` +
+      `metadata->credentialData->>credentialType.ilike.%${term}%,` +
+      `metadata->credentialData->>degree.ilike.%${term}%,` +
       `token_id.ilike.%${term}%`
     );
   }

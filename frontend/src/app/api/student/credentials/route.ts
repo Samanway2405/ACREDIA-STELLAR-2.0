@@ -52,8 +52,10 @@ export async function GET(request: NextRequest) {
 
         // ── Pagination & filter params ────────────────────────────────────────
         const { searchParams } = new URL(request.url);
-        const page     = Math.max(1, parseInt(searchParams.get('page')     ?? '1'));
-        const pageSize = Math.min(100, parseInt(searchParams.get('pageSize') ?? '20'));
+        const rawPage     = parseInt(searchParams.get('page')     ?? '1');
+        const rawPageSize = parseInt(searchParams.get('pageSize') ?? '20');
+        const page     = Math.max(1, isNaN(rawPage)     ? 1  : rawPage);
+        const pageSize = Math.min(100, Math.max(1, isNaN(rawPageSize) ? 20 : rawPageSize));
         const search   = searchParams.get('search')   ?? '';
         const status   = searchParams.get('status')   ?? 'all';
         const dateFrom = searchParams.get('dateFrom') ?? '';
@@ -145,9 +147,9 @@ export async function GET(request: NextRequest) {
             const term = search.trim();
             query = query.or(
                 `token_id.ilike.%${term}%,` +
-                `metadata->>institutionName.ilike.%${term}%,` +
-                `metadata->>credentialType.ilike.%${term}%,` +
-                `metadata->>degree.ilike.%${term}%`
+                `metadata->credentialData->>institutionName.ilike.%${term}%,` +
+                `metadata->credentialData->>credentialType.ilike.%${term}%,` +
+                `metadata->credentialData->>degree.ilike.%${term}%`
             );
         }
 

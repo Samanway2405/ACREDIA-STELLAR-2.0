@@ -215,6 +215,7 @@ export default function StudentCredentialsList({
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <Input
+                        key={search}
                         placeholder="Search by type, degree, institution..."
                         defaultValue={search}
                         onKeyDown={e => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,7 +105,16 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
                 ...(dateTo   && { dateTo }),
             });
 
-            const res = await fetch(`/api/institution/credentials?${params}`);
+            const { data: { session } } = await supabase.auth.getSession();
+const accessToken = session?.access_token;
+if (!accessToken) {
+    setCredentials([]);
+    return;
+}
+
+const res = await fetch(`/api/institution/credentials?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+});
             const json = await res.json();
 
             if (!res.ok || !json.success) {
@@ -225,6 +235,7 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
+                        key={search}
                         placeholder="Search by name, degree, token ID..."
                         defaultValue={search}
                         onKeyDown={e => {
