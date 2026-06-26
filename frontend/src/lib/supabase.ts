@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { normalizePublicSignupRole, type PublicSignupRole } from './adminAccess';
 import { normalizeEmail } from './authFlow';
+import { runtimeConfig } from './runtimeConfig';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = runtimeConfig.supabase.url;
+const supabaseAnonKey = runtimeConfig.supabase.anonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (!runtimeConfig.isProduction) {
         console.warn('⚠️ Missing Supabase environment variables');
     }
 }
