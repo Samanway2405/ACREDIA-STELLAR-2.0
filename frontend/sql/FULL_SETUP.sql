@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS public.verification_logs (
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+COMMENT ON TABLE public.verification_logs IS
+    'Privacy-safe audit log for public verification attempts. Store coarse outcomes and hashed request identifiers only.';
+
 -- ---------------------------------------------------------------------
 -- Credentials: ensure hash/version columns exist (for older DBs)
 -- IF the columns are missing -> add them; ELSE leave as-is.
@@ -93,14 +96,26 @@ ALTER TABLE public.credentials
     ADD COLUMN IF NOT EXISTS hash_algorithm TEXT;
 
 -- Stamp legacy rows that predate canonical hashing, then set defaults.
+-- v0 means "legacy JSON.stringify(metadata)"; v1 means canonical JSON.
 UPDATE public.credentials
-SET hash_algorithm = 'sha256:json-stringify'
-WHERE metadata_schema_version IS NULL
-  AND hash_algorithm IS NULL;
+SET metadata_schema_version = CASE
+    WHEN hash_algorithm = 'sha256:canonical-json:v1' THEN 1
+    ELSE 0
+END
+WHERE metadata_schema_version IS NULL;
+
+UPDATE public.credentials
+SET hash_algorithm = CASE
+    WHEN metadata_schema_version = 0 THEN 'sha256:json-stringify'
+    ELSE 'sha256:canonical-json:v1'
+END
+WHERE hash_algorithm IS NULL;
 
 ALTER TABLE public.credentials
     ALTER COLUMN metadata_schema_version SET DEFAULT 1,
-    ALTER COLUMN hash_algorithm SET DEFAULT 'sha256:canonical-json:v1';
+    ALTER COLUMN hash_algorithm SET DEFAULT 'sha256:canonical-json:v1',
+    ALTER COLUMN metadata_schema_version SET NOT NULL,
+    ALTER COLUMN hash_algorithm SET NOT NULL;
 
 -- ---------------------------------------------------------------------
 -- Functions
@@ -249,6 +264,9 @@ CREATE INDEX IF NOT EXISTS idx_credentials_institution_revoked
 
 CREATE INDEX IF NOT EXISTS idx_credentials_issued_at
   ON public.credentials (issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_verification_logs_created_at ON public.verification_logs (created_at);
+CREATE INDEX IF NOT EXISTS idx_verification_logs_result_type
+    ON public.verification_logs ((verification_result->>'result_type'));
 
 -- ---------------------------------------------------------------------
 -- Enable Row Level Security
@@ -421,10 +439,6 @@ CREATE POLICY "Admin can view verification logs"
 CREATE POLICY "Admin can insert verification logs"
   ON public.verification_logs FOR INSERT
   WITH CHECK (public.is_admin());
-
-CREATE POLICY "Anyone can insert verification logs"
-  ON public.verification_logs FOR INSERT
-  WITH CHECK (true);
 
 COMMIT;
 

@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import QRCodeModal from './QRCodeModal';
 import { getIPFSUrl } from '@/lib/ipfs';
 import { debugLog } from '@/lib/debug';
@@ -123,6 +124,16 @@ export default function StudentCredentialsList({
             const response = await fetch(`/api/student/credentials?${params}`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
             });
+            let payload = await response.json();
+
+            if (response.status === 401 && payload?.error === 'Invalid or expired access token') {
+                const { data: refreshed, error: refreshError } =
+                    await supabase.auth.refreshSession();
+                accessToken = refreshed.session?.access_token;
+
+                if (refreshError || !accessToken) {
+                    throw new Error('Your session expired. Please sign in again.');
+                }
 
             const payload = await response.json();
 
@@ -150,14 +161,24 @@ export default function StudentCredentialsList({
     if (loading) {
         return (
             <Card className="border-gray-200 bg-white p-6 shadow-lg">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">My Credentials</h2>
-                <div className="space-y-3">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="h-24 rounded-lg bg-gray-100 animate-pulse"
-                            style={{ opacity: 1 - i * 0.2 }}
-                        />
+                <div className="mb-6 flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-gray-900">My Credentials</h2>
+                    <Skeleton className="h-9 w-24" />
+                </div>
+                
+                <div className="mb-6">
+                    <Skeleton className="h-10 w-full" />
+                </div>
+
+                <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                </div>
+
+                <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-40 w-full rounded-xl" />
                     ))}
                 </div>
             </Card>
@@ -232,8 +253,11 @@ export default function StudentCredentialsList({
                 )}
             </div>
 
-            {/* Stats */}
-            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div
+                className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3"
+                role="region"
+                aria-label="Credential statistics"
+            >
                 <div className="rounded-lg bg-teal-50 p-4">
                     <p className="text-sm font-medium text-teal-700">Total</p>
                     <p className="text-3xl font-bold text-teal-900">{total}</p>
@@ -333,7 +357,20 @@ function CredentialCard({ credential }: { credential: Credential }) {
                             {metadata.degree && (
                                 <div className="flex items-center space-x-2">
                                     <GraduationCap className="h-4 w-4 text-gray-500" />
-                                    <span><span className="font-medium">Degree:</span> {metadata.degree}</span>
+                                    <span>
+                                        <span className="font-medium">Degree:</span>{' '}
+                                        {metadata.degree}
+                                    </span>
+                                </div>
+                            )}
+                            {metadata.major && (
+                                <div>
+                                    <span className="font-medium">Major:</span> {metadata.major}
+                                </div>
+                            )}
+                            {metadata.gpa && (
+                                <div>
+                                    <span className="font-medium">GPA:</span> {metadata.gpa}
                                 </div>
                             )}
                             {metadata.major && <div><span className="font-medium">Major:</span> {metadata.major}</div>}

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Dialog,
     DialogContent,
@@ -42,7 +43,16 @@ interface Credential {
     token_id: string;
     ipfs_hash: string;
     blockchain_hash: string;
-    metadata: any;
+    metadata: {
+        credentialData?: {
+            studentName?: string;
+            degree?: string;
+            major?: string;
+            gpa?: string;
+            issueDate?: string;
+            credentialType?: string;
+        };
+    } | null;
     issued_at: string;
     revoked: boolean;
 }
@@ -106,7 +116,7 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
             setTotalPages(json.totalPages ?? 0);
         } catch (err: any) {
             console.error('Error loading credentials:', err);
-            setError(err.message || 'Failed to load credentials');
+            setError((err instanceof Error ? err.message : String(err)) || 'Failed to load credentials');
         } finally {
             setIsLoading(false);
         }
@@ -131,17 +141,25 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
             toast.success('Credential revoked successfully');
             setRevokeDialogOpen(false);
             setCredentialToRevoke(null);
-            await loadCredentials();
-        } catch (err: any) {
+            await loadCredentials(); // Refresh list
+        } catch (err: unknown) {
+            console.error('Error revoking credential:', err);
+
+            // Show user-friendly error messages
             let errorMessage = 'Failed to revoke credential';
-            if (err.message?.includes('canceled') || err.message?.includes('rejected')) {
-                errorMessage = 'Revocation was canceled or rejected';
-            } else if (err.message?.includes('same wallet')) {
+
+            if ((err instanceof Error ? err.message : String(err))?.includes('canceled') || (err instanceof Error ? err.message : String(err))?.includes('rejected')) {
+                errorMessage = 'Revocation was canceled or rejected by you';
+            } else if ((err instanceof Error ? err.message : String(err))?.includes('Network')) {
+                errorMessage = 'Network mismatch. Please check your Freighter wallet settings.';
+            } else if ((err instanceof Error ? err.message : String(err))?.includes('same wallet')) {
                 errorMessage = 'You must connect the same wallet that issued this credential';
-            } else if (err.message?.includes('already revoked')) {
+            } else if ((err instanceof Error ? err.message : String(err))?.includes('Not authorized')) {
+                errorMessage = 'Only the institution that issued this credential can revoke it';
+            } else if ((err instanceof Error ? err.message : String(err))?.includes('already revoked')) {
                 errorMessage = 'This credential has already been revoked';
-            } else if (err.message) {
-                errorMessage = err.message;
+            } else if ((err instanceof Error ? err.message : String(err))) {
+                errorMessage = (err instanceof Error ? err.message : String(err));
             }
             toast.error(errorMessage, { duration: 5000 });
         } finally {
@@ -155,14 +173,22 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
             <Card className="p-6 bg-white border-gray-200 shadow-lg">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold text-gray-900">Issued Credentials</h2>
+                    <Skeleton className="h-9 w-24" />
                 </div>
-                <div className="space-y-3">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="h-24 rounded-lg bg-gray-100 animate-pulse"
-                            style={{ opacity: 1 - i * 0.15 }}
-                        />
+                
+                <div className="mb-6">
+                    <Skeleton className="h-10 w-full" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                    <Skeleton className="h-24 w-full rounded-lg" />
+                </div>
+
+                <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-40 w-full rounded-xl" />
                     ))}
                 </div>
             </Card>
@@ -243,7 +269,11 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div
+                className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"
+                role="region"
+                aria-label="Credential statistics"
+            >
                 <div className="bg-teal-50 rounded-lg p-4">
                     <p className="text-sm text-teal-700 font-medium">Showing</p>
                     <p className="text-3xl font-bold text-teal-900">{total}</p>
@@ -316,7 +346,9 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
                     <DialogHeader>
                         <DialogTitle>Revoke Credential</DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to revoke this credential? This action cannot be undone.
+                            Are you sure you want to revoke this credential? This action cannot be
+                            undone. The credential will be marked as revoked on the blockchain and
+                            in the database.
                         </DialogDescription>
                     </DialogHeader>
                     {credentialToRevoke && (
@@ -324,11 +356,13 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
                             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                                 <p className="text-sm">
                                     <span className="font-medium">Student:</span>{' '}
-                                    {credentialToRevoke.metadata?.credentialData?.studentName || 'Unknown'}
+                                    {credentialToRevoke.metadata?.credentialData?.studentName ||
+                                        'Unknown'}
                                 </p>
                                 <p className="text-sm">
                                     <span className="font-medium">Credential:</span>{' '}
-                                    {credentialToRevoke.metadata?.credentialData?.credentialType || 'N/A'}
+                                    {credentialToRevoke.metadata?.credentialData?.credentialType ||
+                                        'N/A'}
                                 </p>
                                 <p className="text-sm">
                                     <span className="font-medium">Token ID:</span>{' '}
@@ -340,7 +374,10 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
                                     <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                                     <div className="text-sm text-yellow-800">
                                         <p className="font-medium mb-1">Important:</p>
-                                        <p>You must use the same wallet that issued this credential.</p>
+                                        <p>
+                                            You must use the same wallet that issued this
+                                            credential.
+                                        </p>
                                         {address && (
                                             <p className="mt-1 font-mono text-xs break-all">Connected: {address}</p>
                                         )}
@@ -367,7 +404,13 @@ export function IssuedCredentialsList({ institutionId, refreshTrigger }: IssuedC
     );
 }
 
-function CredentialCard({ credential, onRevoke }: { credential: Credential; onRevoke: (credential: Credential) => void }) {
+function CredentialCard({
+    credential,
+    onRevoke,
+}: {
+    credential: Credential;
+    onRevoke: (credential: Credential) => void;
+}) {
     const metadata = credential.metadata?.credentialData || {};
     const ipfsUrl = credential.ipfs_hash ? getIPFSUrl(credential.ipfs_hash) : null;
     const blockchainUrl = credential.blockchain_hash

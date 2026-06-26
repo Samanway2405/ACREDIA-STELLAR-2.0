@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient, requireAdminRequest } from '@/lib/serverAuth';
 import { verifyAdminAuthorizationTransaction } from '@/lib/adminAuthorizationVerification';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
+const ADMIN_UPDATE_AUTHORIZATION_RATE_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 60,
+    prefix: 'admin-update-authorization',
+} as const;
+
 export async function POST(request: NextRequest) {
     try {
+        const rateLimitResponse = enforceRateLimit(request, ADMIN_UPDATE_AUTHORIZATION_RATE_LIMIT);
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         const adminCheck = await requireAdminRequest(request);
         if (!adminCheck.ok) {
             return NextResponse.json(
                 { success: false, error: adminCheck.error },
-                { status: adminCheck.status }
+                { status: adminCheck.status },
             );
         }
 
@@ -21,18 +33,21 @@ export async function POST(request: NextRequest) {
         if (!walletAddress) {
             return NextResponse.json(
                 { success: false, error: 'Wallet address is required' },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
         if (!transactionHash) {
             return NextResponse.json(
                 { success: false, error: 'Authorization transaction hash is required' },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
-        const verification = await verifyAdminAuthorizationTransaction(walletAddress, transactionHash);
+        const verification = await verifyAdminAuthorizationTransaction(
+            walletAddress,
+            transactionHash,
+        );
         if (!verification.ok) {
             return NextResponse.json(
                 {
@@ -40,7 +55,7 @@ export async function POST(request: NextRequest) {
                     error: verification.message,
                     code: verification.code,
                 },
-                { status: verification.status }
+                { status: verification.status },
             );
         }
 
@@ -55,7 +70,7 @@ export async function POST(request: NextRequest) {
             console.error('Error finding institution:', findError);
             return NextResponse.json(
                 { success: false, error: 'Failed to find institution' },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -75,7 +90,7 @@ export async function POST(request: NextRequest) {
                 console.error('Error updating institution:', updateError);
                 return NextResponse.json(
                     { success: false, error: 'Failed to update institution' },
-                    { status: 500 }
+                    { status: 500 },
                 );
             }
 
@@ -90,7 +105,8 @@ export async function POST(request: NextRequest) {
         // If no institution found with this wallet, return info but don't fail
         return NextResponse.json({
             success: true,
-            message: 'Wallet authorized on blockchain. Institution will be linked when they connect.',
+            message:
+                'Wallet authorized on blockchain. Institution will be linked when they connect.',
             wallet: verification.walletAddress,
             transactionHash: verification.transactionHash,
         });
@@ -102,7 +118,7 @@ export async function POST(request: NextRequest) {
                 error: 'Failed to update authorization',
                 details: error instanceof Error ? error.message : 'Unknown error',
             },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

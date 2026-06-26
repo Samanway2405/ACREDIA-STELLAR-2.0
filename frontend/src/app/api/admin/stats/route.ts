@@ -1,15 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient, requireAdminRequest } from '@/lib/serverAuth';
+import { enforceRateLimit } from '@/lib/rateLimit';
+import { VERIFICATION_RESULT_TYPES } from '@/lib/verificationAudit';
 
 export const dynamic = 'force-dynamic';
 
+const ADMIN_STATS_RATE_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 60,
+    prefix: 'admin-stats',
+} as const;
+
 export async function GET(request: NextRequest) {
     try {
+        const rateLimitResponse = enforceRateLimit(request, ADMIN_STATS_RATE_LIMIT);
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         const adminCheck = await requireAdminRequest(request);
         if (!adminCheck.ok) {
             return NextResponse.json(
                 { success: false, error: adminCheck.error },
-                { status: adminCheck.status }
+                { status: adminCheck.status },
             );
         }
 
@@ -50,8 +63,8 @@ export async function GET(request: NextRequest) {
 
         // Combine and deduplicate
         const authorizedInstitutionIds = new Set([
-            ...(institutionsWithWallet?.map(i => i.id) || []),
-            ...(institutionsWithCredentials?.map(c => c.institution_id) || [])
+            ...(institutionsWithWallet?.map((i) => i.id) || []),
+            ...(institutionsWithCredentials?.map((c) => c.institution_id) || []),
         ]);
 
         const authorizedInstitutions = authorizedInstitutionIds.size;
@@ -84,6 +97,48 @@ export async function GET(request: NextRequest) {
             console.error('Error fetching students:', studentsError);
         }
 
+        // Fetch aggregate public verification activity. This route is admin-only,
+        // so maintainers can monitor volume without exposing raw log rows publicly.
+        const { count: totalVerificationAttempts, error: verificationTotalError } =
+            await supabase
+                .from('verification_logs')
+                .select('*', { count: 'exact', head: true });
+
+        if (verificationTotalError) {
+            console.error('Error fetching verification log count:', verificationTotalError);
+        }
+
+        const verificationSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: verificationAttemptsLast24h, error: verificationRecentError } =
+            await supabase
+                .from('verification_logs')
+                .select('*', { count: 'exact', head: true })
+                .gte('created_at', verificationSince);
+
+        if (verificationRecentError) {
+            console.error('Error fetching recent verification log count:', verificationRecentError);
+        }
+
+        const verificationResultEntries = await Promise.all(
+            VERIFICATION_RESULT_TYPES.map(async (resultType) => {
+                const { count, error } = await supabase
+                    .from('verification_logs')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('verification_result->>result_type', resultType);
+
+                if (error) {
+                    console.error(`Error fetching ${resultType} verification count:`, error);
+                }
+
+                return [resultType, count || 0] as const;
+            }),
+        );
+
+        const verificationResultCounts = Object.fromEntries(verificationResultEntries) as Record<
+            (typeof VERIFICATION_RESULT_TYPES)[number],
+            number
+        >;
+
         return NextResponse.json({
             success: true,
             stats: {
@@ -92,6 +147,11 @@ export async function GET(request: NextRequest) {
                 totalCredentials: totalCredentials || 0,
                 activeCredentials: activeCredentials || 0,
                 totalStudents: totalStudents || 0,
+                verificationActivity: {
+                    totalAttempts: totalVerificationAttempts || 0,
+                    attemptsLast24h: verificationAttemptsLast24h || 0,
+                    resultCounts: verificationResultCounts,
+                },
             },
         });
     } catch (error) {
@@ -102,7 +162,7 @@ export async function GET(request: NextRequest) {
                 error: 'Failed to fetch statistics',
                 details: error instanceof Error ? error.message : 'Unknown error',
             },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

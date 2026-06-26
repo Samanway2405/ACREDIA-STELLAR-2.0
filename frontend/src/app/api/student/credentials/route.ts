@@ -5,8 +5,15 @@ import {
     hasServiceRoleEnv,
     requireAuthenticatedRequest,
 } from '@/lib/serverAuth';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
+
+const STUDENT_CREDENTIALS_RATE_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 60,
+    prefix: 'student-credentials',
+} as const;
 
 type CredentialRow = {
     id: string;
@@ -21,11 +28,16 @@ type CredentialRow = {
 
 export async function GET(request: NextRequest) {
     try {
+        const rateLimitResponse = enforceRateLimit(request, STUDENT_CREDENTIALS_RATE_LIMIT);
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         const authCheck = await requireAuthenticatedRequest(request);
         if (!authCheck.ok) {
             return NextResponse.json(
                 { success: false, error: authCheck.error },
-                { status: authCheck.status }
+                { status: authCheck.status },
             );
         }
 
@@ -59,35 +71,44 @@ export async function GET(request: NextRequest) {
             console.error('[student/credentials] Error fetching student row:', studentError);
             return NextResponse.json(
                 { success: false, error: 'Failed to load student profile' },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
         // ── Auto-create student row if missing ────────────────────────────────
         if (!studentRow) {
+            console.warn(
+                '[student/credentials] No student row found for userId:',
+                authCheck.userId,
+                '— attempting auto-create',
+            );
+
             const serviceClient = hasServiceRoleEnv() ? getServiceRoleClient() : null;
             if (serviceClient) {
                 const { data: authUser } = await serviceClient.auth.admin.getUserById(
-                    authCheck.userId
+                    authCheck.userId,
                 );
                 const userEmail = authUser?.user?.email ?? '';
                 const userName =
-                    authUser?.user?.user_metadata?.name ??
-                    userEmail.split('@')[0] ??
-                    'Student';
+                    authUser?.user?.user_metadata?.name ?? userEmail.split('@')[0] ?? 'Student';
 
                 if (userEmail) {
                     const { data: newStudent, error: createError } = await serviceClient
                         .from('students')
                         .upsert(
                             { auth_user_id: authCheck.userId, name: userName, email: userEmail },
-                            { onConflict: 'email', ignoreDuplicates: false }
+                            { onConflict: 'email', ignoreDuplicates: false },
                         )
                         .select('id, wallet_address')
                         .maybeSingle();
 
                     if (!createError && newStudent) {
                         studentRow = newStudent;
+                        // eslint-disable-next-line no-console
+                        console.log(
+                            '[student/credentials] Auto-created student row:',
+                            newStudent.id,
+                        );
                     } else {
                         const { data: byEmail } = await serviceClient
                             .from('students')
@@ -153,7 +174,7 @@ export async function GET(request: NextRequest) {
         console.error('[student/credentials] Unhandled error:', err);
         return NextResponse.json(
             { success: false, error: 'Failed to fetch student credentials' },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }
