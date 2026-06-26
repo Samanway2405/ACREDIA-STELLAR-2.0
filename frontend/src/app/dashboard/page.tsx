@@ -135,7 +135,10 @@ function DashboardContent() {
                     throw new Error(payload?.error || 'Failed to link institution wallet');
                 }
 
-                setInstitutionWalletAddress(payload.walletAddress || address);
+                // Always sync local state with the persisted wallet address so
+                // the mismatch guard does not keep re-triggering on re-renders,
+                // regardless of whether the DB row actually changed.
+                setInstitutionWalletAddress(payload.walletAddress ?? address);
                 debugLog('Connected wallet linked to institution profile.');
                 if (payload.changed) {
                     toast.success('Institution wallet linked');
@@ -144,9 +147,10 @@ function DashboardContent() {
                 console.error('Error linking institution wallet:', error);
                 toast.error('Failed to link connected wallet to your institution');
             } finally {
-                if (walletLinkInFlight.current === address) {
-                    walletLinkInFlight.current = null;
-                }
+                // Always clear the in-flight guard so a failed or interrupted
+                // attempt never permanently blocks future link attempts
+                // (e.g. after React StrictMode double-invocation or a transient error).
+                walletLinkInFlight.current = null;
                 setLinkingInstitutionWallet(false);
             }
         };
