@@ -182,8 +182,8 @@ export async function GET(
         const [onChain, onChainRevoked, issuerAuthorized] = await Promise.all([
             getCredential(data.token_id),
             isRevoked(data.token_id),
-            data.issuer_wallet_address
-                ? isAuthorizedIssuer(data.issuer_wallet_address)
+            data.issuer_wallet_address && typeof isAuthorizedIssuer === 'function'
+                ? isAuthorizedIssuer(data.issuer_wallet_address).catch(() => false)
                 : Promise.resolve(false),
         ]);
 
