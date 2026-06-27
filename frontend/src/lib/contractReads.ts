@@ -9,7 +9,6 @@ import {
     TransactionBuilder,
     Account,
     TimeoutInfinite,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     Address,
     nativeToScVal,
     scValToNative,
@@ -150,6 +149,17 @@ export async function isRevoked(tokenId: string | number): Promise<boolean> {
     try {
         const result = await simulate('is_revoked', [
             nativeToScVal(Number(tokenId), { type: 'u64' }),
+        ]);
+        return result === true;
+    } catch {
+        return false;
+    }
+}
+
+export async function isAuthorizedIssuer(issuerAddress: string): Promise<boolean> {
+    try {
+        const result = await simulate('is_authorized_issuer', [
+            new Address(issuerAddress).toScVal(),
         ]);
         return result === true;
     } catch {

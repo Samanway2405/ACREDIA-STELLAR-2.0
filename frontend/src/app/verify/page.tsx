@@ -58,6 +58,8 @@ interface CredentialData {
     institution: {
         name: string;
     } | null;
+    issuer_authorized?: boolean;
+    issuer_status?: 'active' | 'revoked';
 }
 
 type ScanState =
@@ -153,12 +155,15 @@ function VerifyContent() {
             }
 
             const safe = payload.credential;
+            const verification = payload.verification;
             const transformedData: CredentialData = {
                 token_id: safe.tokenId,
                 issued_at: safe.issuedAt,
                 revoked: Boolean(safe.revoked),
                 revoked_at: safe.revokedAt || null,
                 institution: safe.institutionName ? { name: safe.institutionName } : null,
+                issuer_authorized: verification?.issuerAuthorized,
+                issuer_status: verification?.issuerStatus,
                 metadata: {
                     credentialData: {
                         credentialType: safe.credentialType || undefined,
@@ -958,6 +963,29 @@ function VerifyContent() {
                                         </div>
                                     </div>
                                 )}
+
+                                <div className="flex items-start space-x-3">
+                                    <Shield className="h-5 w-5 text-teal-600 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-500">
+                                            Issuer Authorization
+                                        </p>
+                                        <p className="text-base font-semibold text-gray-900">
+                                            {credential.issuer_authorized === false
+                                                ? 'No'
+                                                : credential.issuer_authorized === true
+                                                  ? 'Yes'
+                                                  : 'Unknown'}
+                                        </p>
+                                        <p className="text-sm text-gray-600">
+                                            {credential.issuer_authorized === false
+                                                ? 'This credential was issued by an institution that is no longer authorized to issue new credentials.'
+                                                : credential.issuer_authorized === true
+                                                  ? 'This credential remains valid and its issuer is currently authorized.'
+                                                  : 'Issuer authorization status could not be determined.'}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Credential Type & Details */}
