@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient } from '@/lib/serverAuth';
-import { getCredential, isRevoked } from '@/lib/contractReads';
+import { getCredential, isAuthorizedIssuer, isRevoked } from '@/lib/contractReads';
 import { deriveCredentialHash } from '@/lib/credentialHash';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
@@ -179,9 +179,12 @@ export async function GET(
 
         credentialId = data.id;
 
-        const [onChain, onChainRevoked] = await Promise.all([
+        const [onChain, onChainRevoked, issuerAuthorized] = await Promise.all([
             getCredential(data.token_id),
             isRevoked(data.token_id),
+            data.issuer_wallet_address && typeof isAuthorizedIssuer === 'function'
+                ? isAuthorizedIssuer(data.issuer_wallet_address).catch(() => false)
+                : Promise.resolve(false),
         ]);
 
         const dbHash = data.metadata
@@ -253,6 +256,8 @@ export async function GET(
                 databaseMatch: true,
                 onChainMatch,
                 onChainFound: onChain !== null,
+                issuerAuthorized,
+                issuerStatus: issuerAuthorized ? 'active' : 'revoked',
             },
         });
     } catch (err: unknown) {

@@ -243,6 +243,11 @@ impl AcrediaCredential {
         env.events().publish((symbol_short!("iss_auth"),), issuer);
     }
 
+    /// Revoke an issuer's permission to issue new credentials.
+    ///
+    /// This does not mutate previously issued credentials. Existing credentials
+    /// remain verifiable and keep their original issuance metadata, while the
+    /// issuer is simply prevented from issuing new credentials in the future.
     pub fn revoke_issuer(env: Env, issuer: Address) {
         let owner = read_owner(&env);
         owner.require_auth();

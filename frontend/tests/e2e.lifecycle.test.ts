@@ -50,6 +50,7 @@ vi.mock('../src/lib/serverAuth', () => ({
 vi.mock('../src/lib/contractReads', () => ({
     getCredential: mockGetCredential,
     isRevoked: mockIsRevoked,
+    isAuthorizedIssuer: vi.fn().mockResolvedValue(true),
 }));
 
 // Mock Supabase
