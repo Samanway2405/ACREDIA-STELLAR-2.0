@@ -117,7 +117,11 @@ fn extend_total_credentials_ttl(env: &Env) {
 /// and transparently migrates existing instance-based authorizations to persistent storage.
 fn check_and_extend_authorization(env: &Env, issuer: &Address) -> bool {
     // 1. Check persistent storage (new behavior)
-    if let Some(authorized) = env.storage().persistent().get::<_, bool>(&DataKey::Authorized(issuer.clone())) {
+    if let Some(authorized) = env
+        .storage()
+        .persistent()
+        .get::<_, bool>(&DataKey::Authorized(issuer.clone()))
+    {
         if authorized {
             env.storage().persistent().extend_ttl(
                 &DataKey::Authorized(issuer.clone()),
@@ -129,17 +133,25 @@ fn check_and_extend_authorization(env: &Env, issuer: &Address) -> bool {
     }
 
     // 2. Fallback to instance storage (for existing deployments)
-    if let Some(authorized) = env.storage().instance().get::<_, bool>(&DataKey::Authorized(issuer.clone())) {
+    if let Some(authorized) = env
+        .storage()
+        .instance()
+        .get::<_, bool>(&DataKey::Authorized(issuer.clone()))
+    {
         if authorized {
             // Migrate to persistent
-            env.storage().persistent().set(&DataKey::Authorized(issuer.clone()), &true);
+            env.storage()
+                .persistent()
+                .set(&DataKey::Authorized(issuer.clone()), &true);
             env.storage().persistent().extend_ttl(
                 &DataKey::Authorized(issuer.clone()),
                 PERSISTENT_THRESHOLD,
                 PERSISTENT_BUMP_AMOUNT,
             );
             // Clean up instance storage
-            env.storage().instance().remove(&DataKey::Authorized(issuer.clone()));
+            env.storage()
+                .instance()
+                .remove(&DataKey::Authorized(issuer.clone()));
         }
         return authorized;
     }
@@ -911,22 +923,36 @@ mod tests {
 
         env.as_contract(&contract, || {
             AcrediaCredential::initialize(env.clone(), owner.clone()).unwrap();
-            
+
             // Manually simulate an old deployment by writing to instance storage directly
-            env.storage().instance().set(&DataKey::Authorized(issuer.clone()), &true);
-            
+            env.storage()
+                .instance()
+                .set(&DataKey::Authorized(issuer.clone()), &true);
+
             // Confirm it's not in persistent storage
-            assert!(!env.storage().persistent().has(&DataKey::Authorized(issuer.clone())));
-            
+            assert!(!env
+                .storage()
+                .persistent()
+                .has(&DataKey::Authorized(issuer.clone())));
+
             // Call is_authorized_issuer, which should trigger the migration
             let is_auth = AcrediaCredential::is_authorized_issuer(env.clone(), issuer.clone());
-            assert!(is_auth, "Issuer should be authorized via migration fallback");
-            
+            assert!(
+                is_auth,
+                "Issuer should be authorized via migration fallback"
+            );
+
             // Check that it's now in persistent storage and removed from instance
-            assert!(env.storage().persistent().has(&DataKey::Authorized(issuer.clone())));
-            assert!(!env.storage().instance().has(&DataKey::Authorized(issuer.clone())));
+            assert!(env
+                .storage()
+                .persistent()
+                .has(&DataKey::Authorized(issuer.clone())));
+            assert!(!env
+                .storage()
+                .instance()
+                .has(&DataKey::Authorized(issuer.clone())));
         });
-        
+
         env.as_contract(&contract, || {
             let hash = dummy_hash(&env, 99);
             AcrediaCredential::issue_credential(
@@ -935,7 +961,8 @@ mod tests {
                 issuer,
                 hash,
                 String::from_str(&env, "ipfs://test"),
-            ).expect("Should issue credential using migrated authorization");
+            )
+            .expect("Should issue credential using migrated authorization");
         });
     }
 }
