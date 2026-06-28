@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { BrandSectionHeader } from '@/components/marketing/BrandSectionHeader';
+import { ABOUT_HIGHLIGHTS } from '@/lib/marketingContent';
 import {
     Shield,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -223,19 +225,38 @@ export default function AboutPage() {
 
             {/* Hero Section */}
             <section className="container mx-auto px-4 py-20">
-                <div className="max-w-4xl mx-auto text-center space-y-6">
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight">
+                <div className="mx-auto max-w-4xl space-y-6 text-center">
+                    <h1 className="text-4xl font-bold leading-tight sm:text-5xl md:text-6xl">
                         <span className="text-gray-900">About </span>
                         <span className="bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
                             Acredia
                         </span>
                     </h1>
-                    <p className="text-lg sm:text-xl text-gray-600 leading-relaxed">
+                    <p className="text-lg leading-relaxed text-gray-600 sm:text-xl">
                         The world's first comprehensive blockchain-powered academic credential
                         platform combining Soulbound NFTs, Zero-Knowledge Proofs, and AI-driven
                         verification for secure, tamper-proof, and globally recognized educational
                         credentials.
                     </p>
+                </div>
+            </section>
+
+            <section className="container mx-auto px-4 py-16">
+                <BrandSectionHeader
+                    title="Why institutions and contributors choose Acredia"
+                    description="The experience stays approachable while the platform remains secure, modular, and ready for open-source collaboration."
+                    eyebrow="Why it stands out"
+                />
+                <div className="mt-10 grid gap-6 md:grid-cols-3">
+                    {ABOUT_HIGHLIGHTS.map((item) => (
+                        <Card
+                            key={item.title}
+                            className="border border-gray-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-lg"
+                        >
+                            <h3 className="mb-3 text-xl font-semibold text-gray-900">{item.title}</h3>
+                            <p className="text-sm leading-7 text-gray-600">{item.description}</p>
+                        </Card>
+                    ))}
                 </div>
             </section>
 

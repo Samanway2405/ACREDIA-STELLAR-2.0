@@ -9,6 +9,8 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
+import { BrandSectionHeader } from '@/components/marketing/BrandSectionHeader';
+import { HOMEPAGE_FEATURES } from '@/lib/marketingContent';
 import {
     Shield,
     CheckCircle,
@@ -762,16 +764,49 @@ export default function Home() {
                 </div>
             </section>
 
+            <section className="container mx-auto px-4 py-16">
+                <BrandSectionHeader
+                    title="Built for trust, speed, and privacy"
+                    description="Acredia keeps the verification experience simple while the underlying stack stays robust and secure."
+                    eyebrow="Core benefits"
+                />
+                <div className="mt-10 grid gap-6 md:grid-cols-3">
+                    {HOMEPAGE_FEATURES.map((feature) => {
+                        const Icon =
+                            feature.icon === 'sparkles'
+                                ? Sparkles
+                                : feature.icon === 'lock'
+                                  ? Lock
+                                  : Shield;
+
+                        return (
+                            <Card
+                                key={feature.title}
+                                className="border border-gray-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-lg"
+                            >
+                                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white">
+                                    <Icon className="h-6 w-6" />
+                                </div>
+                                <h3 className="mb-3 text-xl font-semibold text-gray-900">
+                                    {feature.title}
+                                </h3>
+                                <p className="text-sm leading-7 text-gray-600">
+                                    {feature.description}
+                                </p>
+                            </Card>
+                        );
+                    })}
+                </div>
+            </section>
+
             {/* Key Features Section */}
             <section id="features" className="container mx-auto px-4 py-24">
-                <div className="text-center mb-16">
-                    <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-                        Complete Blockchain Credential Ecosystem
-                    </h2>
-                    <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                        Four integrated modules powering secure, verifiable, and globally recognized
-                        academic credentials
-                    </p>
+                <div className="mb-16">
+                    <BrandSectionHeader
+                        title="Complete Blockchain Credential Ecosystem"
+                        description="Four integrated modules powering secure, verifiable, and globally recognized academic credentials"
+                        eyebrow="Platform overview"
+                    />
                 </div>
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -830,14 +865,12 @@ export default function Home() {
             {/* Advanced Features */}
             <section className="bg-white py-24">
                 <div className="container mx-auto px-4">
-                    <div className="text-center mb-16">
-                        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-                            Advanced Technology Stack
-                        </h2>
-                        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                            Built on cutting-edge blockchain and AI technologies for unmatched
-                            security
-                        </p>
+                    <div className="mb-16">
+                        <BrandSectionHeader
+                            title="Advanced Technology Stack"
+                            description="Built on cutting-edge blockchain and AI technologies for unmatched security"
+                            eyebrow="Why it matters"
+                        />
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-8">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,187 +19,35 @@ import {
     Hash,
     Home,
     Info,
-    Award,
-    Lock,
     Camera,
     ScanLine,
     RotateCcw,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { extractTokenFromQrPayload } from '@/lib/verification';
-
-interface CredentialData {
-    token_id: string;
-    ipfs_hash?: string | null;
-    blockchain_hash?: string | null;
-    metadata?: {
-        credentialData?: {
-            studentName?: string;
-            credentialType?: string;
-            degree?: string;
-            major?: string;
-            gpa?: string;
-            issueDate?: string;
-            institutionName?: string;
-            subjects?: Array<{
-                name?: string;
-                marks?: string;
-                maxMarks?: string;
-                grade?: string;
-            }>;
-        };
-    };
-    issued_at: string;
-    revoked: boolean;
-    revoked_at: string | null;
-    student_wallet_address?: string;
-    issuer_wallet_address?: string;
-    institution: {
-        name: string;
-    } | null;
-    issuer_authorized?: boolean;
-    issuer_status?: 'active' | 'revoked';
-}
-
-type ScanState =
-    | 'idle'
-    | 'requesting'
-    | 'scanning'
-    | 'success'
-    | 'permission-denied'
-    | 'no-camera'
-    | 'invalid'
-    | 'unsupported'
-    | 'error';
+import { VerificationStateCard } from '@/components/verify/VerificationStateCard';
+import { VerificationSummary } from '@/components/verify/VerificationSummary';
+import { useCredentialVerification } from '@/hooks/useCredentialVerification';
 
 const QR_READER_ID = 'credential-qr-reader';
 
 function VerifyContent() {
     const searchParams = useSearchParams();
     const tokenId = searchParams.get('token');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const scannerRef = useRef<any>(null);
-
-    const [loading, setLoading] = useState(true);
-    const [credential, setCredential] = useState<CredentialData | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [verificationStatus, setVerificationStatus] = useState<
-        'valid' | 'invalid' | 'revoked' | null
-    >(null);
-    const [manualToken, setManualToken] = useState('');
-    const [scanMode, setScanMode] = useState(false);
-    const [scanState, setScanState] = useState<ScanState>('idle');
-    const [scanMessage, setScanMessage] = useState(
-        'Scan the credential QR code to verify it instantly.',
-    );
-
-    useEffect(() => {
-        if (tokenId) {
-            verifyCredential(tokenId);
-        } else {
-            setLoading(false);
-        }
-    }, [tokenId]);
-
-    const stopScanner = useCallback(async () => {
-        const scanner = scannerRef.current;
-
-        if (!scanner) {
-            return;
-        }
-
-        try {
-            if (scanner.isScanning) {
-                await scanner.stop();
-            }
-        } catch (err) {
-            console.warn('Unable to stop QR scanner:', err);
-        }
-
-        try {
-            await scanner.clear();
-        } catch (err) {
-            console.warn('Unable to clear QR scanner:', err);
-        }
-
-        scannerRef.current = null;
-    }, []);
-
-    useEffect(() => {
-        return () => {
-            void stopScanner();
-        };
-    }, [stopScanner]);
-
-    useEffect(() => {
-        if (!scanMode) {
-            void stopScanner();
-            setScanState('idle');
-            setScanMessage('Scan the credential QR code to verify it instantly.');
-        }
-    }, [scanMode, stopScanner]);
-
-    const verifyCredential = async (token: string) => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const response = await fetch(`/api/verify/${encodeURIComponent(token)}`);
-            const payload = await response.json();
-
-            if (!response.ok || !payload?.success || !payload?.credential) {
-                throw new Error(
-                    payload?.error || 'Credential not found. The token ID may be invalid.',
-                );
-            }
-
-            const safe = payload.credential;
-            const verification = payload.verification;
-            const transformedData: CredentialData = {
-                token_id: safe.tokenId,
-                issued_at: safe.issuedAt,
-                revoked: Boolean(safe.revoked),
-                revoked_at: safe.revokedAt || null,
-                institution: safe.institutionName ? { name: safe.institutionName } : null,
-                issuer_authorized: verification?.issuerAuthorized,
-                issuer_status: verification?.issuerStatus,
-                metadata: {
-                    credentialData: {
-                        credentialType: safe.credentialType || undefined,
-                        degree: safe.degree || undefined,
-                        major: safe.major || undefined,
-                        issueDate: safe.issueDate || undefined,
-                        institutionName: safe.institutionName || undefined,
-                    },
-                },
-            };
-
-            setCredential(transformedData);
-
-            if (safe.revoked) {
-                setVerificationStatus('revoked');
-            } else {
-                setVerificationStatus('valid');
-            }
-        } catch (err: unknown) {
-            setError((err instanceof Error ? err.message : String(err)) || 'Failed to verify credential');
-            setVerificationStatus('invalid');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const verifyToken = useCallback((token: string) => {
-        const cleanedToken = token.trim();
-
-        if (!cleanedToken) {
-            return;
-        }
-
-        window.history.pushState({}, '', `/verify?token=${encodeURIComponent(cleanedToken)}`);
-        verifyCredential(cleanedToken);
-    }, []);
+    const {
+        loading,
+        credential,
+        error,
+        verificationStatus,
+        manualToken,
+        setManualToken,
+        scanMode,
+        scanState,
+        scanMessage,
+        handleManualVerify,
+        startScanner,
+        setScanMode,
+    } = useCredentialVerification(tokenId);
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString('en-US', {
@@ -213,114 +61,6 @@ function VerifyContent() {
         if (!hash) return '#';
         if (hash.startsWith('http')) return hash;
         return `https://ipfs.io/ipfs/${hash}`;
-    };
-
-    const handleManualVerify = () => {
-        if (manualToken.trim()) {
-            verifyToken(manualToken);
-        }
-    };
-
-    const startScanner = async () => {
-        if (!scanMode) {
-            setScanMode(true);
-            await new Promise<void>((resolve) => {
-                requestAnimationFrame(() => resolve());
-            });
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-            setScanState('unsupported');
-            setScanMessage(
-                'This browser does not support camera scanning. Enter the token ID manually.',
-            );
-            return;
-        }
-
-        setScanState('requesting');
-        setScanMessage('Waiting for camera permission...');
-        await stopScanner();
-
-        try {
-            const { Html5Qrcode } = await import('html5-qrcode');
-            const cameras = await Html5Qrcode.getCameras();
-
-            if (!cameras.length) {
-                setScanState('no-camera');
-                setScanMessage('No camera was found on this device. Enter the token ID manually.');
-                return;
-            }
-
-            const readerElement = document.getElementById(QR_READER_ID);
-
-            if (!readerElement) {
-                setScanState('error');
-                setScanMessage('The scanner could not be initialized. Please try again.');
-                return;
-            }
-
-            const preferredCamera =
-                cameras.find((camera) => /back|rear|environment/i.test(camera.label)) || cameras[0];
-            const scanner = new Html5Qrcode(QR_READER_ID, false);
-            scannerRef.current = scanner;
-            setScanState('scanning');
-            setScanMessage('Point your camera at the credential QR code.');
-
-            await scanner.start(
-                preferredCamera.id,
-                {
-                    fps: 10,
-                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                        const qrboxSize = Math.floor(minEdge * 0.72);
-                        return { width: qrboxSize, height: qrboxSize };
-                    },
-                    aspectRatio: 1,
-                },
-                async (decodedText: string) => {
-                    const scannedToken = extractTokenFromQrPayload(decodedText);
-
-                    if (!scannedToken) {
-                        setScanState('invalid');
-                        setScanMessage(
-                            'This QR code does not contain a valid Acredia verification URL or token ID.',
-                        );
-                        return;
-                    }
-
-                    setScanState('success');
-                    setScanMessage('QR code found. Loading the verification report...');
-                    await stopScanner();
-                    verifyToken(scannedToken);
-                },
-                () => undefined,
-            );
-        } catch (err: unknown) {
-            const errorName = err instanceof Error ? err.name : '';
-            const errorMessage = String(err instanceof Error ? err.message : err);
-
-            if (
-                errorName === 'NotAllowedError' ||
-                errorMessage.toLowerCase().includes('permission')
-            ) {
-                setScanState('permission-denied');
-                setScanMessage(
-                    'Camera permission was denied. Allow camera access in your browser settings or enter the token ID manually.',
-                );
-                return;
-            }
-
-            if (errorName === 'NotFoundError' || errorMessage.toLowerCase().includes('not found')) {
-                setScanState('no-camera');
-                setScanMessage('No camera was found on this device. Enter the token ID manually.');
-                return;
-            }
-
-            setScanState('error');
-            setScanMessage(
-                'The camera scanner could not start. Check browser permissions and try again.',
-            );
-        }
     };
 
     // Show manual entry form if no token provided
@@ -835,57 +575,27 @@ function VerifyContent() {
                         <div className="flex flex-col items-center justify-center space-y-6">
                             {verificationStatus === 'valid' && (
                                 <>
-                                    <div className="rounded-full bg-linear-to-br from-green-100 to-emerald-100 p-8 shadow-lg">
-                                        <CheckCircle className="h-24 w-24 text-green-600" />
-                                    </div>
-                                    <div className="text-center space-y-3">
-                                        <h2 className="text-4xl font-bold text-gray-900">
-                                            Credential Verified ✓
-                                        </h2>
-                                        <p className="text-lg text-gray-600 max-w-2xl">
-                                            This credential is authentic, valid, and secured on the
-                                            blockchain
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-wrap gap-3 justify-center">
-                                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100 px-4 py-2 text-sm">
-                                            <Shield className="h-4 w-4 mr-2" />
-                                            Blockchain Verified
-                                        </Badge>
-                                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 px-4 py-2 text-sm">
-                                            <Lock className="h-4 w-4 mr-2" />
-                                            Tamper-Proof
-                                        </Badge>
-                                        <Badge className="bg-teal-100 text-teal-800 hover:bg-teal-100 px-4 py-2 text-sm">
-                                            <Award className="h-4 w-4 mr-2" />
-                                            Authentic
-                                        </Badge>
-                                    </div>
+                                    <VerificationStateCard
+                                        status="valid"
+                                        title="Credential Verified ✓"
+                                        description="This credential is authentic, valid, and secured on the blockchain"
+                                    />
+                                    <VerificationSummary status={verificationStatus} />
                                 </>
                             )}
 
                             {verificationStatus === 'revoked' && (
                                 <>
-                                    <div className="rounded-full bg-linear-to-br from-orange-100 to-red-100 p-8 shadow-lg">
-                                        <AlertCircle className="h-24 w-24 text-orange-600" />
-                                    </div>
-                                    <div className="text-center space-y-3">
-                                        <h2 className="text-4xl font-bold text-gray-900">
-                                            Credential Revoked
-                                        </h2>
-                                        <p className="text-lg text-gray-600 max-w-2xl">
-                                            This credential has been revoked by the issuing
-                                            institution
+                                    <VerificationStateCard
+                                        status="revoked"
+                                        title="Credential Revoked"
+                                        description="This credential has been revoked by the issuing institution"
+                                    />
+                                    {credential.revoked_at && (
+                                        <p className="text-sm font-medium text-gray-500">
+                                            Revoked on: {formatDate(credential.revoked_at)}
                                         </p>
-                                        {credential.revoked_at && (
-                                            <p className="text-sm text-gray-500 font-medium">
-                                                Revoked on: {formatDate(credential.revoked_at)}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100 px-4 py-2 text-base">
-                                        ⚠️ Revoked
-                                    </Badge>
+                                    )}
                                 </>
                             )}
                         </div>
