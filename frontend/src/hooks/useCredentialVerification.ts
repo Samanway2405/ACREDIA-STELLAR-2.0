@@ -46,6 +46,7 @@ export type ScanState =
     | 'error';
 
 export function useCredentialVerification(tokenId: string | null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Html5Qrcode is dynamically imported; narrowing to its full API is impractical
     const scannerRef = useRef<any>(null);
     const [loading, setLoading] = useState(true);
     const [credential, setCredential] = useState<CredentialData | null>(null);
