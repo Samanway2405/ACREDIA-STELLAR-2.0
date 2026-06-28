@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
+import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -1064,15 +1065,11 @@ export default function VerifyPage() {
     return (
         <Suspense
             fallback={
-                <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md space-y-8">
-                        <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="h-16 w-16 animate-pulse rounded-2xl bg-gray-200"></div>
-                            <div className="h-8 w-48 animate-pulse rounded-lg bg-gray-200"></div>
-                            <div className="h-4 w-64 animate-pulse rounded bg-gray-200"></div>
-                        </div>
-                    </div>
-                </div>
+                <RouteStateScreen
+                    title="Loading verification"
+                    description="Preparing the credential verification experience..."
+                    variant="loading"
+                />
             }
         >
             <VerifyContent />

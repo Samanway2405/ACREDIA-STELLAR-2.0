@@ -9,6 +9,7 @@ import { AuthorizeIssuer } from '@/components/institution/AuthorizeIssuer';
 import { ConnectWallet } from '@/components/ui/ConnectWallet';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
 import { getContractOwner } from '@/lib/contracts';
 import { debugLog, debugWarn } from '@/lib/debug';
 import { runtimeConfig } from '@/lib/runtimeConfig';
@@ -152,33 +153,11 @@ function AdminDashboardContent() {
 
     if (isChecking) {
         return (
-            <div className="flex min-h-screen flex-col bg-linear-to-br from-gray-50 via-teal-50 to-cyan-50">
-                <div className="p-6 md:p-10 mx-auto w-full max-w-7xl">
-                    <div className="flex items-center space-x-4 mb-8">
-                        <Skeleton className="h-11 w-11 rounded-xl" />
-                        <div className="space-y-2">
-                            <Skeleton className="h-8 w-48" />
-                            <Skeleton className="h-4 w-64" />
-                        </div>
-                    </div>
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-                        {[1, 2, 3, 4].map((i) => (
-                            <Card key={i} className="p-6">
-                                <Skeleton className="h-4 w-24 mb-4" />
-                                <Skeleton className="h-8 w-16" />
-                            </Card>
-                        ))}
-                    </div>
-                    <Card className="p-6">
-                        <Skeleton className="h-6 w-32 mb-6" />
-                        <div className="space-y-4">
-                            {[1, 2, 3].map((i) => (
-                                <Skeleton key={i} className="h-16 w-full" />
-                            ))}
-                        </div>
-                    </Card>
-                </div>
-            </div>
+            <RouteStateScreen
+                title="Loading admin"
+                description="Preparing the administration workspace..."
+                variant="loading"
+            />
         );
     }
 
