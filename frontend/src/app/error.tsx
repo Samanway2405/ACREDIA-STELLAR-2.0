@@ -7,7 +7,6 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
     useEffect(() => {
         console.error('Route error:', error);
         if (typeof window !== 'undefined' && 'gtag' in window) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as Window & { gtag?: (...args: unknown[]) => void }).gtag?.('event', 'exception', {
                 description: error.message,
                 fatal: false,

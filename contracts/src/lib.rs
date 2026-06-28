@@ -47,6 +47,7 @@ pub enum DataKey {
     Credential(u64),
     HashIndex(BytesN<32>),
     TotalCredentials,
+    StorageVersion,
 }
 
 #[contracttype]
@@ -459,6 +460,38 @@ impl AcrediaCredential {
         owner.require_auth();
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         extend_instance_ttl(&env);
+    }
+
+    /// Get the current storage version.
+    pub fn get_storage_version(env: Env) -> u32 {
+        extend_instance_ttl(&env);
+        env.storage()
+            .instance()
+            .get::<DataKey, u32>(&DataKey::StorageVersion)
+            .unwrap_or(1)
+    }
+
+    /// Migrate storage schema to the current version.
+    pub fn migrate(env: Env) -> Result<(), ContractError> {
+        let owner = read_owner(&env);
+        owner.require_auth();
+        extend_instance_ttl(&env);
+
+        let current_version = env
+            .storage()
+            .instance()
+            .get::<DataKey, u32>(&DataKey::StorageVersion)
+            .unwrap_or(1);
+
+        if current_version < 2 {
+            // Perform schema / data migration logic here.
+            // E.g., initializing/updating storage parameters, etc.
+            env.storage()
+                .instance()
+                .set(&DataKey::StorageVersion, &2u32);
+        }
+
+        Ok(())
     }
 }
 
@@ -969,5 +1002,67 @@ mod tests {
             )
             .expect("Should issue credential using migrated authorization");
         });
+    }
+
+    #[test]
+    fn test_upgrade_owner_gated() {
+        let (env, contract, owner, _, _) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+        
+        let wasm_bytes = include_bytes!("../target/wasm32v1-none/release/acredia_stellar.wasm");
+        let new_wasm_hash = env.deployer().upload_contract_wasm(soroban_sdk::Bytes::from_slice(&env, wasm_bytes));
+
+        client.upgrade(&new_wasm_hash);
+        
+        let auths = env.auths();
+        assert_eq!(auths.len(), 1);
+        let (auth_addr, invocation) = &auths[0];
+        assert_eq!(auth_addr, &owner);
+        assert_eq!(
+            invocation.function,
+            soroban_sdk::testutils::AuthorizedFunction::Contract((
+                contract.clone(),
+                soroban_sdk::Symbol::new(&env, "upgrade"),
+                (new_wasm_hash,).into_val(&env),
+            ))
+        );
+    }
+
+    #[test]
+    fn test_get_storage_version_and_migrate() {
+        let (env, contract, owner, _, _) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+
+        assert_eq!(client.get_storage_version(), 1);
+
+        client.migrate();
+        let auths = env.auths();
+
+        assert_eq!(client.get_storage_version(), 2);
+
+        assert_eq!(auths.len(), 1);
+        let (auth_addr, invocation) = &auths[0];
+        assert_eq!(auth_addr, &owner);
+        assert_eq!(
+            invocation.function,
+            soroban_sdk::testutils::AuthorizedFunction::Contract((
+                contract.clone(),
+                soroban_sdk::Symbol::new(&env, "migrate"),
+                ().into_val(&env),
+            ))
+        );
+    }
+
+    #[test]
+    fn test_migrate_only_once() {
+        let (env, contract, _, _, _) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+
+        assert_eq!(client.get_storage_version(), 1);
+        client.migrate();
+        assert_eq!(client.get_storage_version(), 2);
+        
+        client.migrate();
+        assert_eq!(client.get_storage_version(), 2);
     }
 }

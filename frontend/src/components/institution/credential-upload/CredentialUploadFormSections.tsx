@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -235,7 +236,7 @@ export function CredentialUploadFormSections({
                 {previewUrl && (
                     <div className="mt-4">
                         <p className="mb-2 text-sm font-medium text-gray-700">Preview:</p>
-                        <img src={previewUrl} alt="Preview" className="max-h-64 max-w-full rounded-lg border border-gray-200" />
+                        <Image src={previewUrl} alt="Preview" width={400} height={256} className="max-h-64 max-w-full rounded-lg border border-gray-200" style={{ objectFit: 'contain' }} unoptimized />
                     </div>
                 )}
                 {selectedFile && selectedFile.type === 'application/pdf' && (

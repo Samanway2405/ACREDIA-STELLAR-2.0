@@ -8,7 +8,6 @@ import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { AuthorizeIssuer } from '@/components/institution/AuthorizeIssuer';
 import { ConnectWallet } from '@/components/ui/ConnectWallet';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
 import { getContractOwner } from '@/lib/contracts';
 import { debugLog, debugWarn } from '@/lib/debug';

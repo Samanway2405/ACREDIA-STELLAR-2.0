@@ -32,6 +32,9 @@ Single unified contract combining credential issuance, registry, and verificatio
 - `is_revoked(token_id)` - Check revocation status
 - `total_credentials()` - Get total credentials issued
 - `bump_credential(token_id)` - Extend TTL of a credential (permissionless)
+- `upgrade(new_wasm_hash)` - Upgrade contract WASM code (Owner only)
+- `get_storage_version()` - Read the current storage schema version
+- `migrate()` - Run schema and data migrations (Owner only)
 
 ## Prerequisites
 
@@ -312,6 +315,50 @@ View deployed contracts on Stellar Expert:
 - **[Stellar CLI Guide](https://developers.stellar.org/docs/build/guides/cli)**
 - **[Soroban Examples](https://github.com/stellar/rs-soroban-sdk/tree/master/examples)**
 - **[Stellar Laboratory](https://laboratory.stellar.org/)**
+
+## Contract Upgrades & Governance
+
+This contract features an owner-gated upgradeability and data migration path to allow resolving bugs or updating contract logic without redeploying a new contract address (which would break existing QR codes/verification links).
+
+### Who Can Upgrade?
+Only the contract `Owner` can perform upgrades. The `upgrade` function uses `owner.require_auth()` to prevent unauthorized code updates.
+
+### Upgrade Governance & Security
+- **Current Model**: Single-signature authorization. The contract owner account must sign the transaction to execute the upgrade.
+- **Recommendations for Production**: It is highly recommended that the `Owner` address is set to a multi-signature account (e.g., using Stellar's native multi-sig capabilities or a smart contract multisig wallet) or governed by a timelock contract to prevent immediate or malicious upgrades.
+
+### Upgrade Procedure
+To upgrade the contract WASM:
+1. **Upload New WASM Code**:
+   ```bash
+   soroban contract deploy \
+     --wasm target/wasm32v1-none/release/acredia_stellar_new.wasm \
+     --source admin \
+     --network testnet
+   ```
+   Note down the new WASM hash returned (different from the contract deployment contract ID).
+
+2. **Invoke Upgrade**:
+   ```bash
+   soroban contract invoke \
+     --id <CONTRACT_ID> \
+     --source admin \
+     --network testnet \
+     -- \
+     upgrade \
+     --new_wasm_hash "<NEW_WASM_HASH>"
+   ```
+
+3. **Schema / State Migration** (If applicable):
+   If the new WASM version introduces changes to the storage structures, run the migration function:
+   ```bash
+   soroban contract invoke \
+     --id <CONTRACT_ID> \
+     --source admin \
+     --network testnet \
+     -- \
+     migrate
+   ```
 
 ## Storage Archival & TTL Strategy
 
