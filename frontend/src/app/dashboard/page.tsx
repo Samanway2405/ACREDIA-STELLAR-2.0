@@ -11,6 +11,7 @@ import { IssuedCredentialsList } from '@/components/institution/IssuedCredential
 import StudentCredentialsList from '@/components/student/StudentCredentialsList';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { debugLog, debugWarn } from '@/lib/debug';
 import { safeGetSession, supabase } from '@/lib/supabase';
