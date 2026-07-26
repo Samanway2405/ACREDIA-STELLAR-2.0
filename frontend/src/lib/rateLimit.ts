@@ -4,6 +4,12 @@ type RateLimitOptions = {
     windowSeconds: number;
     maxRequests: number;
     prefix?: string;
+    /**
+     * Bucket the limit on this value instead of the client IP. Use for
+     * per-user quotas on authenticated routes, where a single account must not
+     * be able to sidestep its quota by rotating source addresses.
+     */
+    identifier?: string;
 };
 
 type RateLimitResult = {
@@ -54,12 +60,12 @@ function cleanupStaleBuckets(now: number) {
 
 export const checkRateLimit = (
     request: Request,
-    { windowSeconds, maxRequests, prefix = 'api' }: RateLimitOptions,
+    { windowSeconds, maxRequests, prefix = 'api', identifier }: RateLimitOptions,
 ): RateLimitResult => {
     const now = Date.now();
     const windowMs = windowSeconds * 1000;
-    const ip = getClientIp(request);
-    const key = `${prefix}:${ip}`;
+    const subject = identifier?.trim() || getClientIp(request);
+    const key = `${prefix}:${subject}`;
 
     // Run cleanup periodically to prevent memory leak
     if (now - lastCleanup > CLEANUP_INTERVAL_MS) {

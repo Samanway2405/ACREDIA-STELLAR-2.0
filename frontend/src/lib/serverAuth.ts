@@ -1,7 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
 import { resolveUserRole } from './roleResolver';
 import { runtimeConfig, serverRuntimeConfig } from './runtimeConfig';
+
+type AuthenticatedRequest = {
+    ok: true;
+    userId: string;
+    /** The verified Supabase user, for callers that need role resolution. */
+    user: User;
+    /** The bearer token that was verified, for building user-scoped clients. */
+    accessToken: string;
+};
+
+type AuthFailure = { ok: false; status: number; error: string };
 
 const supabaseUrl = runtimeConfig.supabase.url;
 const supabaseAnonKey = runtimeConfig.supabase.anonKey;
@@ -130,7 +142,7 @@ export async function requireAdminRequest(
 
 export async function requireAuthenticatedRequest(
     request: NextRequest,
-): Promise<{ ok: true; userId: string } | { ok: false; status: number; error: string }> {
+): Promise<AuthenticatedRequest | AuthFailure> {
     if (!hasPublicEnv()) {
         return {
             ok: false,
@@ -162,6 +174,69 @@ export async function requireAuthenticatedRequest(
     return {
         ok: true,
         userId: authData.user.id,
+        user: authData.user,
+        accessToken: token,
+    };
+}
+
+/**
+ * Guard for routes that only credential **issuers** may call.
+ *
+ * Authenticates the caller, then resolves their role through the shared
+ * {@link resolveUserRole} resolver so this guard can never drift from the role
+ * priority documented in `AUTH_FLOW.md`. Anything other than `'institution'`
+ * — anonymous, student, admin, or unprovisioned — is rejected.
+ *
+ * Prefers the service-role client so the check does not depend on RLS; falls
+ * back to a client scoped to the caller's own access token, where the
+ * "view own data" policies still expose the rows the resolver needs.
+ */
+export async function requireInstitutionRequest(
+    request: NextRequest,
+): Promise<
+    | { ok: true; userId: string; institutionId: string | null }
+    | { ok: false; status: number; error: string }
+> {
+    const authCheck = await requireAuthenticatedRequest(request);
+    if (!authCheck.ok) {
+        return authCheck;
+    }
+
+    let client;
+    try {
+        client = hasServiceRoleEnv()
+            ? createServiceRoleClient()
+            : createUserScopedServerClient(authCheck.accessToken);
+    } catch {
+        return {
+            ok: false,
+            status: 500,
+            error: 'Server configuration error',
+        };
+    }
+
+    const role = await resolveUserRole(client, authCheck.user);
+
+    if (role !== 'institution') {
+        return {
+            ok: false,
+            status: 403,
+            error: 'Institution access required',
+        };
+    }
+
+    // Best-effort: callers use this to scope uploads to the issuing institution.
+    // A missing row is not fatal — `profiles.role` already established the role.
+    const { data: institution } = await client
+        .from('institutions')
+        .select('id')
+        .eq('auth_user_id', authCheck.userId)
+        .maybeSingle();
+
+    return {
+        ok: true,
+        userId: authCheck.userId,
+        institutionId: (institution?.id as string | undefined) ?? null,
     };
 }
 
