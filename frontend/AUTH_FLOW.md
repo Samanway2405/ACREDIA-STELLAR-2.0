@@ -28,6 +28,7 @@ verification. The auth system is split into three layers:
 │                   Server (API Routes)                │
 │                                                      │
 │  serverAuth.ts  ──▶  requireAuthenticatedRequest()   │
+│                 ──▶  requireInstitutionRequest()      │
 │                 ──▶  requireAdminRequest()            │
 │                                                      │
 │  roleResolver.ts  (resolveUserRoleServer)            │
@@ -233,8 +234,15 @@ Server-side guards live in
 token from the `Authorization` header and return a discriminated union:
 
 ```ts
-type AuthResult = { ok: true; userId: string } | { ok: false; status: number; error: string };
+type AuthResult =
+    | { ok: true; userId: string; user: User; accessToken: string }
+    | { ok: false; status: number; error: string };
 ```
+
+`user` and `accessToken` are carried through so role-checking guards can reuse
+the verified user without a second round-trip, and can build a token-scoped
+client when no service-role key is configured. Guards that layer on top of
+`requireAuthenticatedRequest` (below) narrow this to their own shape.
 
 ### `requireAuthenticatedRequest(request)`
 
@@ -280,6 +288,39 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
 }
 ```
+
+### `requireInstitutionRequest(request)`
+
+Use for endpoints only credential **issuers** may call — anything that spends a
+shared, server-held resource on the caller's behalf (for example the IPFS
+pinning routes, which use the server-only `PINATA_JWT`).
+
+It authenticates the caller, then resolves their role through the shared
+[`resolveUserRole()`](src/lib/roleResolver.ts) resolver, so it can never drift
+from the priority table in §3. Anything other than `'institution'` — anonymous
+(401), student, admin, or unprovisioned (403) — is rejected. Admins are **not**
+issuers and are rejected too.
+
+```ts
+import { requireInstitutionRequest } from '@/lib/serverAuth';
+
+export async function POST(request: NextRequest) {
+    const auth = await requireInstitutionRequest(request);
+    if (!auth.ok) {
+        return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    // auth.userId is a verified institution; auth.institutionId scopes the work
+    // (null when the role came from `profiles.role` with no `institutions` row).
+}
+```
+
+> [!IMPORTANT]
+> Pair this guard with a **per-user** quota, not just a per-IP one. Pass
+> `identifier: auth.userId` to `enforceRateLimit()` so a single account cannot
+> sidestep its quota by rotating source addresses. See the IPFS routes for the
+> pattern: a coarse per-IP limit *before* the auth check (so anonymous floods
+> cannot drive token verification), then a per-account quota after it.
 
 ### `resolveUserRoleServer(client, userId)`
 
@@ -410,7 +451,7 @@ tokens and proactive session renewal. Always prefer it over the raw Supabase
 | [`src/types/index.ts`](src/types/index.ts)                     | `AppRole`, `RoleState` type definitions                                                                |
 | [`src/lib/roleResolver.ts`](src/lib/roleResolver.ts)           | Shared role resolution logic (`resolveUserRole`, `resolveUserRoleClient`, `resolveUserRoleServer`)     |
 | [`src/contexts/AuthContext.tsx`](src/contexts/AuthContext.tsx) | Client-side auth state provider (`AuthProvider`, `useAuth`, `ProtectedRoute`)                          |
-| [`src/lib/serverAuth.ts`](src/lib/serverAuth.ts)               | Server-side auth guards (`requireAuthenticatedRequest`, `requireAdminRequest`, `getServiceRoleClient`) |
+| [`src/lib/serverAuth.ts`](src/lib/serverAuth.ts)               | Server-side auth guards (`requireAuthenticatedRequest`, `requireInstitutionRequest`, `requireAdminRequest`, `getServiceRoleClient`) |
 | [`src/lib/adminAccess.ts`](src/lib/adminAccess.ts)             | Admin setup helpers, `normalizePublicSignupRole()`                                                     |
 | [`src/lib/supabase.ts`](src/lib/supabase.ts)                   | Supabase browser client, `signUp`, `signIn`, `signOut`, `safeGetSession`                               |
 
