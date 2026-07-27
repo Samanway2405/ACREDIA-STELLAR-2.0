@@ -77,6 +77,10 @@ test('core pages pass WCAG 2.1 AA accessibility audit', async ({ page }) => {
     results = await runAxe(page);
     expect(results.violations, `Verify page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 
+    await page.goto('/credentials/1');
+    results = await runAxe(page);
+    expect(results.violations, `Public Credential page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
     // Authenticated admin state
     const adminState = createE2eState({
         role: 'admin',
