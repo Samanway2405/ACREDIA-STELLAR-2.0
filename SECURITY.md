@@ -1,5 +1,17 @@
 # Security Advisories
 
+## Secrets Management and Rotation
+
+The authoritative runbook for secret storage, testnet/mainnet profile separation,
+and emergency key rotation is in `SECRETS_ROTATION.md`.
+
+Highlights:
+
+- Server-only secrets must never be exposed via `NEXT_PUBLIC_*` variables.
+- Use one network selector: `NEXT_PUBLIC_STELLAR_NETWORK` (`testnet`, `mainnet`, `custom`).
+- Rotate immediately if secrets were committed/shared in issues, logs, screenshots, or chat.
+- Repository protections include `gitleaks` in CI and a pre-commit `gitleaks` hook.
+
 ## Public Verification Audit Logs
 
 `/api/verify/[token]` writes an operational audit row only after its rate limiter

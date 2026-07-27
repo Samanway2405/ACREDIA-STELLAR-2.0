@@ -582,15 +582,12 @@ NEXT_PUBLIC_CREDENTIAL_NFT_CONTRACT=CARWFW27MJ3OJADAUAHI3TDFHIL62YMLVEKTUTMSNXOM
 NEXT_PUBLIC_CREDENTIAL_REGISTRY_CONTRACT=CARWFW27MJ3OJADAUAHI3TDFHIL62YMLVEKTUTMSNXOMH7JJTNZKC3DK
 
 # Stellar Network Configuration
-NEXT_PUBLIC_CHAIN_ID=testnet
-NEXT_PUBLIC_NETWORK_NAME=testnet
-NEXT_PUBLIC_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
-NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
-NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+NEXT_PUBLIC_STELLAR_NETWORK=testnet
 
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+# Server-only (set in hosting secret store for production)
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 VERIFICATION_LOG_HASH_SECRET=your_random_audit_hash_secret
 
@@ -620,7 +617,7 @@ STELLAR_SOURCE_ACCOUNT=deployer
 STELLAR_CONTRACT_ID=
 ```
 
-> **Production warning**: Keep `SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, and all Stellar secret keys server-only. Never put service-role keys, Pinata JWTs, or Stellar secret keys in `NEXT_PUBLIC_*` variables, browser code, screenshots, logs, or GitHub issues.
+> **Production warning**: Keep `SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, `VERIFICATION_LOG_HASH_SECRET`, and all Stellar secret keys server-only. Never put server secrets in `NEXT_PUBLIC_*` variables, browser code, screenshots, logs, or GitHub issues.
 
 ### Database Setup
 
@@ -720,12 +717,15 @@ npm start
 Before deploying to production:
 
 - **Switch to Mainnet**: Set `NEXT_PUBLIC_STELLAR_NETWORK=mainnet` in your production environment variables to point the application to the live Stellar network.
+- **Keep one network switch**: Use only `NEXT_PUBLIC_STELLAR_NETWORK` (`testnet`, `mainnet`, or `custom`). Testnet/Mainnet profiles are boot-time validated and endpoint/passphrase overrides are blocked.
 - **Update Contract Addresses**: Ensure `NEXT_PUBLIC_CREDENTIAL_NFT_CONTRACT` and `NEXT_PUBLIC_CREDENTIAL_REGISTRY_CONTRACT` are updated to your verified mainnet deployment IDs. (The app will fail to boot if it detects the known testnet contract on mainnet).
 - Use Stellar Public Network values only after contract review and a verified mainnet deployment.
 - Rotate any secret that was pasted into chat, screenshots, logs, browser code, or an issue.
-- Set server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, Stellar secret keys) only in the hosting provider's protected environment variables.
+- Set server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, `VERIFICATION_LOG_HASH_SECRET`, Stellar secret keys) only in the hosting provider's protected environment variables.
 - Confirm Supabase RLS is enabled and production policies come from `frontend/sql/FULL_SETUP.sql`.
 - Verify contract IDs on Stellar Expert before pointing users at a production environment.
+
+See `SECRETS_ROTATION.md` for the complete key-rotation runbook and pre-commit/CI secret-scan workflow.
 
 
 ---

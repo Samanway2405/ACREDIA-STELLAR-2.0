@@ -68,6 +68,20 @@ frontend/sql/secure_rls_migration.sql
 - Verify contract IDs on Stellar Expert before using them in production.
 - Use Stellar Public Network only after contract review, RLS review, and deployment verification.
 
+## Secret Scan Gate (Pre-Commit + CI)
+
+This repository uses `gitleaks` in CI and ships a local pre-commit hook config.
+
+Set up the local hook once:
+
+```powershell
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+If a secret is detected, rotate the affected key immediately and follow `SECRETS_ROTATION.md`.
+
 ## Reporting Issues
 
 Use the GitHub issue templates. Reports should include:
