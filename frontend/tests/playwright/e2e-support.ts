@@ -1,0 +1,193 @@
+import type { Page, Route } from '@playwright/test';
+import type { E2eAdminStats, E2eState } from '@/lib/e2e';
+
+export function createE2eState(overrides: Partial<E2eState> = {}): E2eState {
+    return {
+        enabled: true,
+        session: {
+            user: {
+                id: 'user-1',
+                email: 'user@acredia.test',
+                user_metadata: { name: 'Acredia User' },
+            },
+            access_token: 'e2e-access-token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+        },
+        role: 'institution',
+        walletAddress: 'GAcrediaIssuerWallet0000000000000000000000000000001',
+        contractOwner: 'GAcrediaAdminWallet00000000000000000000000000000001',
+        authorizedIssuers: ['GAcrediaIssuerWallet0000000000000000000000000000001'],
+        institution: {
+            id: 'inst-1',
+            name: 'Acredia Academy',
+            walletAddress: 'GAcrediaIssuerWallet0000000000000000000000000000001',
+        },
+        stats: createAdminStats(),
+        nextTokenId: 1,
+        issuedCredentials: [],
+        ...overrides,
+    };
+}
+
+export function createAdminStats(overrides: Partial<E2eAdminStats> = {}): E2eAdminStats {
+    return {
+        totalInstitutions: 1,
+        authorizedInstitutions: 1,
+        totalCredentials: 0,
+        activeCredentials: 0,
+        totalStudents: 1,
+        verificationActivity: {
+            totalAttempts: 0,
+            attemptsLast24h: 0,
+            resultCounts: {
+                verified: 0,
+                revoked: 0,
+                not_found: 0,
+                chain_unavailable: 0,
+                mismatch: 0,
+                invalid_request: 0,
+                server_error: 0,
+            },
+        },
+        ...overrides,
+    };
+}
+
+export async function seedE2eState(page: Page, state: E2eState) {
+    await page.addInitScript((initialState) => {
+        const stored = window.sessionStorage.getItem('__ACREDIA_E2E__');
+        if (stored) {
+            try {
+                window.__ACREDIA_E2E__ = JSON.parse(stored);
+                return;
+            } catch {
+                // Fall back to initial state on parse failure
+            }
+        }
+        window.__ACREDIA_E2E__ = initialState as typeof window.__ACREDIA_E2E__;
+        window.sessionStorage.setItem('__ACREDIA_E2E__', JSON.stringify(initialState));
+    }, state);
+}
+
+export async function installE2eRoutes(page: Page) {
+    await page.route('**/rest/v1/institutions**', async (route) => {
+        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const institution = state?.institution;
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(
+                institution
+                    ? [
+                          {
+                              id: institution.id,
+                              wallet_address: institution.walletAddress,
+                              auth_user_id: state?.session?.user.id ?? 'user-1',
+                              email: state?.session?.user.email ?? 'user@acredia.test',
+                              name: institution.name,
+                          },
+                      ]
+                    : [],
+            ),
+        });
+    });
+
+    await page.route('**/api/institution/credentials**', async (route) => {
+        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const credentials = state?.issuedCredentials ?? [];
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                success: true,
+                credentials,
+                total: credentials.length,
+                page: 1,
+                totalPages: 1,
+            }),
+        });
+    });
+
+    await page.route('**/api/admin/stats**', async (route) => {
+        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                success: true,
+                stats: state?.stats ?? createAdminStats(),
+            }),
+        });
+    });
+
+    await page.route('**/api/admin/update-authorization**', async (route) => {
+        const payload = route.request().postDataJSON() as { walletAddress?: string; transactionHash?: string };
+        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+
+        if (state && payload.walletAddress) {
+            state.authorizedIssuers ??= [];
+            if (!state.authorizedIssuers.includes(payload.walletAddress)) {
+                state.authorizedIssuers.push(payload.walletAddress);
+            }
+
+            if (state.stats) {
+                state.stats.authorizedInstitutions = state.authorizedIssuers.length;
+            }
+        }
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                success: true,
+                walletAddress: payload.walletAddress,
+                transactionHash: payload.transactionHash ?? 'e2e-authorization-tx',
+            }),
+        });
+    });
+
+    await page.route('**/api/verify/**', async (route) => {
+        const token = new URL(route.request().url()).pathname.split('/').pop() ?? '';
+        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const credential = state?.issuedCredentials?.find((entry) => entry.token_id === token) ?? null;
+
+        if (!credential) {
+            await route.fulfill({
+                status: 404,
+                contentType: 'application/json',
+                body: JSON.stringify({ success: false, error: 'Credential not found' }),
+            });
+            return;
+        }
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                success: true,
+                credential: {
+                    tokenId: credential.token_id,
+                    issuedAt: credential.issued_at,
+                    revoked: credential.revoked,
+                    revokedAt: credential.revoked ? credential.issued_at : null,
+                    institutionName: state?.institution?.name ?? 'Acredia Academy',
+                    credentialType: credential.metadata?.credentialData?.credentialType ?? 'diploma',
+                    degree: credential.metadata?.credentialData?.degree ?? 'Degree',
+                    major: credential.metadata?.credentialData?.major ?? null,
+                    issueDate: credential.metadata?.credentialData?.issueDate ?? null,
+                },
+                verification: {
+                    verified: !credential.revoked,
+                    revoked: credential.revoked,
+                    onChainMatch: true,
+                    onChainFound: true,
+                    issuerAuthorized: true,
+                    issuerStatus: credential.revoked ? 'revoked' : 'active',
+                },
+            }),
+        });
+    });
+}

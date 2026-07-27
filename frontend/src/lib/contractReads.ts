@@ -16,6 +16,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { credentialHashBytesToHex, credentialHashHexToScVal } from './credentialHashEncoding';
 import { runtimeConfig } from './runtimeConfig';
+import { getE2eState } from './e2e';
 
 const RPC_URL = runtimeConfig.stellar.sorobanRpcUrl;
 const NETWORK_PASSPHRASE = runtimeConfig.stellar.networkPassphrase;
@@ -170,6 +171,27 @@ export function normalizeOnChainCredential(result: unknown): OnChainCredential |
  * Returns null if the token does not exist on-chain.
  */
 export async function getCredential(tokenId: string | number): Promise<OnChainCredential | null> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        const credential = e2eState.issuedCredentials?.find(
+            (entry) => entry.token_id === String(tokenId),
+        );
+
+        if (!credential) {
+            return null;
+        }
+
+        return {
+            token_id: Number(credential.token_id),
+            student: credential.student_wallet_address,
+            issuer: credential.issuer_wallet_address,
+            hash: credential.blockchain_hash,
+            uri: `ipfs://${credential.ipfs_hash}`,
+            issued_at: credential.issued_at ? Date.parse(credential.issued_at) : 0,
+            revoked: credential.revoked,
+        };
+    }
+
     try {
         const result = await simulate('get_credential', [
             nativeToScVal(Number(tokenId), { type: 'u64' }),
@@ -203,6 +225,14 @@ export async function verifyCredentialByHash(hash: string): Promise<OnChainCrede
  * Check whether a credential has been revoked on-chain.
  */
 export async function isRevoked(tokenId: string | number): Promise<boolean> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        return Boolean(
+            e2eState.issuedCredentials?.find((credential) => credential.token_id === String(tokenId))
+                ?.revoked,
+        );
+    }
+
     try {
         const result = await simulate('is_revoked', [
             nativeToScVal(Number(tokenId), { type: 'u64' }),
@@ -217,6 +247,17 @@ export async function isRevoked(tokenId: string | number): Promise<boolean> {
 }
 
 export async function isAuthorizedIssuer(issuerAddress: string): Promise<boolean> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        return Boolean(
+            (e2eState.contractOwner &&
+                issuerAddress.toLowerCase() === e2eState.contractOwner.toLowerCase()) ||
+                e2eState.authorizedIssuers?.some(
+                    (value) => value.toLowerCase() === issuerAddress.toLowerCase(),
+                ),
+        );
+    }
+
     try {
         const result = await simulate('is_authorized_issuer', [
             new Address(issuerAddress).toScVal(),

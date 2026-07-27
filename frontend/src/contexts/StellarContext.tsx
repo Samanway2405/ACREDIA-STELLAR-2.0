@@ -5,6 +5,7 @@ import { getAddress, isAllowed, isConnected, requestAccess, setAllowed } from '@
 import { toast } from 'sonner';
 
 import { captureException } from '@/lib/debug';
+import { getE2eState, updateE2eState } from '@/lib/e2e';
 
 interface StellarContextType {
     address: string | null;
@@ -27,6 +28,12 @@ export const StellarProvider = ({ children }: { children: React.ReactNode }) => 
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        const e2eState = getE2eState();
+        if (e2eState?.enabled && e2eState.walletAddress) {
+            setAddress(e2eState.walletAddress);
+            return;
+        }
+
         // Silently restore a previously-approved connection on load.
         // IMPORTANT: never call requestAccess()/setAllowed() here — those open the
         // Freighter extension popup, which must only happen on an explicit user
@@ -52,6 +59,17 @@ export const StellarProvider = ({ children }: { children: React.ReactNode }) => 
     }, []);
 
     const connect = async () => {
+        const e2eState = getE2eState();
+        if (e2eState?.enabled) {
+            const nextAddress = e2eState.walletAddress || 'GE2ECONNECTEDWALLET000000000000000000000000000000000';
+            updateE2eState((state) => {
+                state.walletAddress = nextAddress;
+            });
+            setAddress(nextAddress);
+            setIsConnecting(false);
+            return;
+        }
+
         setIsConnecting(true);
         setError(null);
         try {
@@ -91,6 +109,12 @@ export const StellarProvider = ({ children }: { children: React.ReactNode }) => 
     };
 
     const disconnect = () => {
+        if (getE2eState()?.enabled) {
+            updateE2eState((state) => {
+                state.walletAddress = null;
+            });
+        }
+
         setAddress(null);
         setError(null);
         toast.info('Wallet disconnected from app level.');

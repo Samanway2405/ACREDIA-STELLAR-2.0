@@ -1,4 +1,5 @@
 import { debugLog, captureException } from './debug';
+import { getE2eState } from './e2e';
 import { runtimeConfig } from './runtimeConfig';
 import { supabase, safeGetSession } from './supabase';
 
@@ -52,6 +53,10 @@ async function postToIpfsRoute(
 }
 
 export async function uploadToIPFS(file: File): Promise<string> {
+    if (getE2eState()?.enabled) {
+        return `e2e-file-${file.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+    }
+
     try {
         const response = await postToIpfsRoute(IPFS_FILE_ROUTE, (accessToken) => {
             // Rebuilt per attempt: a FormData body is consumed by the first fetch.
@@ -81,6 +86,10 @@ export async function uploadToIPFS(file: File): Promise<string> {
     }
 }
 export async function uploadJSONToIPFS(data: unknown): Promise<string> {
+    if (getE2eState()?.enabled) {
+        return 'e2e-metadata-cid';
+    }
+
     try {
         const response = await postToIpfsRoute(IPFS_JSON_ROUTE, (accessToken) => ({
             method: 'POST',

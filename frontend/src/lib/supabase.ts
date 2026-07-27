@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { normalizePublicSignupRole, type PublicSignupRole } from './adminAccess';
 import { normalizeEmail } from './authFlow';
+import { getE2eState } from './e2e';
 import { runtimeConfig } from './runtimeConfig';
 
 const supabaseUrl = runtimeConfig.supabase.url;
@@ -46,6 +47,11 @@ function shouldRefreshSession(expiresAt?: number): boolean {
 }
 
 export async function safeGetSession() {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled && e2eState.session) {
+        return { data: { session: e2eState.session }, error: null };
+    }
+
     try {
         const { data, error } = await supabase.auth.getSession();
 
@@ -89,6 +95,20 @@ type PublicSignupOptions = {
 };
 
 export async function signUp(email: string, password: string, options?: PublicSignupOptions) {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        const user = {
+            id: 'e2e-user',
+            email: normalizeEmail(email),
+            user_metadata: options?.data ?? {},
+        };
+
+        return {
+            data: { user, session: null },
+            error: null,
+        };
+    }
+
     const signupData = options?.data
         ? {
               ...options.data,
@@ -143,6 +163,13 @@ export async function updatePassword(password: string) {
 }
 
 export async function resendVerificationEmail(email: string, emailRedirectTo?: string) {
+    if (getE2eState()?.enabled) {
+        return {
+            data: { user: { email: normalizeEmail(email) } },
+            error: null,
+        };
+    }
+
     const credentials = {
         type: 'signup' as const,
         email: normalizeEmail(email),
@@ -154,6 +181,17 @@ export async function resendVerificationEmail(email: string, emailRedirectTo?: s
 }
 
 export async function signOut() {
+    if (getE2eState()?.enabled) {
+        const state = getE2eState();
+        if (state) {
+            state.session = null;
+            state.walletAddress = null;
+            state.role = 'unknown';
+        }
+
+        return { error: null };
+    }
+
     const { error } = await supabase.auth.signOut();
     return { error };
 }

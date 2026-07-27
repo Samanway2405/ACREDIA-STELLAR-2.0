@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 import { buildSecurityHeaders } from './src/lib/securityHeaders';
 
 const nextConfig: NextConfig = {
+    allowedDevOrigins: ['127.0.0.1'],
+
     // ── Security headers ────────────────────────────────────────────────────
     async headers() {
         return buildSecurityHeaders(process.env.NODE_ENV === 'production');
