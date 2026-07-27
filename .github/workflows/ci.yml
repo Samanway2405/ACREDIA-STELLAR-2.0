@@ -15,8 +15,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
   lint-and-test:
     name: Frontend Lint, Tests & Coverage
+    needs: secret-scan
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -95,6 +112,7 @@ jobs:
 
   smart-contracts:
     name: Soroban Contract Checks
+    needs: secret-scan
     runs-on: ubuntu-latest
     defaults:
       run:

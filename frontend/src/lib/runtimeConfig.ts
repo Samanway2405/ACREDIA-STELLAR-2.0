@@ -71,6 +71,13 @@ const NETWORK_DEFAULTS: Record<Exclude<StellarNetworkKind, 'custom'>, StellarNet
 
 const networkKindSchema = z.enum(['testnet', 'mainnet', 'custom']);
 const debugFlagSchema = z.enum(['true', 'false']).optional().transform((value) => value === 'true');
+const PUBLIC_SECRET_ENV_NAMES = [
+    'NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY',
+    'NEXT_PUBLIC_PINATA_JWT',
+    'NEXT_PUBLIC_VERIFICATION_LOG_HASH_SECRET',
+    'NEXT_PUBLIC_STELLAR_SECRET_KEY',
+    'NEXT_PUBLIC_STELLAR_SECRET_SEED',
+] as const;
 
 function readEnv(name: string): string | undefined {
     const value = process.env[name]?.trim();
@@ -143,6 +150,33 @@ function parseNetworkKind(value: string | undefined, isProduction: boolean): Ste
     return parsed.data;
 }
 
+function readNetworkSelector(): string | undefined {
+    const explicit = readEnv('NEXT_PUBLIC_STELLAR_NETWORK');
+    const legacy = readEnv('NEXT_PUBLIC_CHAIN_ID');
+
+    if (
+        explicit
+        && legacy
+        && explicit.trim().toLowerCase() !== legacy.trim().toLowerCase()
+    ) {
+        configError(
+            'NEXT_PUBLIC_STELLAR_NETWORK and NEXT_PUBLIC_CHAIN_ID disagree. Set only NEXT_PUBLIC_STELLAR_NETWORK.',
+        );
+    }
+
+    return explicit ?? legacy;
+}
+
+function assertNoPublicServerSecrets(): void {
+    const leakedPublicSecrets = PUBLIC_SECRET_ENV_NAMES.filter((name) => Boolean(readEnv(name)));
+
+    if (leakedPublicSecrets.length > 0) {
+        configError(
+            `Server-only secrets must never be exposed via NEXT_PUBLIC_* variables. Remove: ${leakedPublicSecrets.join(', ')}`,
+        );
+    }
+}
+
 function requireCustomValue(name: string, value: string | undefined, networkKind: StellarNetworkKind): string {
     const normalizedValue = value?.trim() ?? '';
 
@@ -154,44 +188,51 @@ function requireCustomValue(name: string, value: string | undefined, networkKind
 }
 
 function buildStellarConfig(isProduction: boolean): StellarNetworkConfig {
-    const kind = parseNetworkKind(
-        readEnv('NEXT_PUBLIC_STELLAR_NETWORK') || readEnv('NEXT_PUBLIC_CHAIN_ID'),
-        isProduction,
-    );
+    const kind = parseNetworkKind(readNetworkSelector(), isProduction);
     const defaults = kind === 'custom' ? null : NETWORK_DEFAULTS[kind];
 
-    const horizonValue = readEnv('NEXT_PUBLIC_HORIZON_URL') || defaults?.horizonUrl || '';
-    const rpcValue = readEnv('NEXT_PUBLIC_SOROBAN_RPC_URL') || defaults?.sorobanRpcUrl || '';
-    const passphraseValue = readEnv('NEXT_PUBLIC_NETWORK_PASSPHRASE') || defaults?.networkPassphrase || '';
-    const networkName = readEnv('NEXT_PUBLIC_NETWORK_NAME') || defaults?.networkName || 'custom';
-    const explorerValue = readEnv('NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL') || defaults?.explorerBaseUrl || '';
+    if (defaults) {
+        const profileLockedFields = [
+            ['NEXT_PUBLIC_HORIZON_URL', defaults.horizonUrl],
+            ['NEXT_PUBLIC_SOROBAN_RPC_URL', defaults.sorobanRpcUrl],
+            ['NEXT_PUBLIC_NETWORK_PASSPHRASE', defaults.networkPassphrase],
+            ['NEXT_PUBLIC_NETWORK_NAME', defaults.networkName],
+            ['NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL', defaults.explorerBaseUrl],
+        ] as const;
 
-    const networkPassphrase = requireCustomValue(
+        for (const [envName, expectedValue] of profileLockedFields) {
+            const explicitValue = readEnv(envName);
+            if (explicitValue && explicitValue !== expectedValue) {
+                configError(
+                    `${envName} cannot override the ${kind} profile. Use NEXT_PUBLIC_STELLAR_NETWORK=custom for custom endpoints.`,
+                );
+            }
+        }
+
+        return defaults;
+    }
+
+    const horizonValue = requireCustomValue('NEXT_PUBLIC_HORIZON_URL', readEnv('NEXT_PUBLIC_HORIZON_URL'), kind);
+    const rpcValue = requireCustomValue('NEXT_PUBLIC_SOROBAN_RPC_URL', readEnv('NEXT_PUBLIC_SOROBAN_RPC_URL'), kind);
+    const passphraseValue = requireCustomValue(
         'NEXT_PUBLIC_NETWORK_PASSPHRASE',
-        passphraseValue,
+        readEnv('NEXT_PUBLIC_NETWORK_PASSPHRASE'),
         kind,
     );
-
-    if (defaults && networkPassphrase !== defaults.networkPassphrase) {
-        configError(`NEXT_PUBLIC_NETWORK_PASSPHRASE does not match the selected ${kind} network.`);
-    }
+    const networkName = readEnv('NEXT_PUBLIC_NETWORK_NAME') || 'custom';
+    const explorerValue = requireCustomValue(
+        'NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL',
+        readEnv('NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL'),
+        kind,
+    );
 
     return {
         kind,
-        horizonUrl: parseHttpUrl(
-            'NEXT_PUBLIC_HORIZON_URL',
-            requireCustomValue('NEXT_PUBLIC_HORIZON_URL', horizonValue, kind),
-        ),
-        sorobanRpcUrl: parseHttpUrl(
-            'NEXT_PUBLIC_SOROBAN_RPC_URL',
-            requireCustomValue('NEXT_PUBLIC_SOROBAN_RPC_URL', rpcValue, kind),
-        ),
-        networkPassphrase,
+        horizonUrl: parseHttpUrl('NEXT_PUBLIC_HORIZON_URL', horizonValue),
+        sorobanRpcUrl: parseHttpUrl('NEXT_PUBLIC_SOROBAN_RPC_URL', rpcValue),
+        networkPassphrase: passphraseValue,
         networkName,
-        explorerBaseUrl: parseHttpUrl(
-            'NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL',
-            requireCustomValue('NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL', explorerValue, kind),
-        ),
+        explorerBaseUrl: parseHttpUrl('NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL', explorerValue),
     };
 }
 
@@ -219,6 +260,7 @@ function parseEmailAllowlist(value: string | undefined): string[] {
 
 function buildRuntimeConfig(): RuntimeConfig {
     const isProduction = process.env.NODE_ENV === 'production';
+    assertNoPublicServerSecrets();
     const supabaseUrl = requireProductionValue(
         'NEXT_PUBLIC_SUPABASE_URL',
         readEnv('NEXT_PUBLIC_SUPABASE_URL'),
