@@ -80,7 +80,7 @@ export function SiteNavbar() {
                             Acredia
                         </span>
                         {activeNetwork.kind === 'testnet' && (
-                            <span className="mt-1 w-fit rounded-sm bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-600">
+                            <span className="mt-1 w-fit rounded-sm bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-800">
                                 Testnet
                             </span>
                         )}

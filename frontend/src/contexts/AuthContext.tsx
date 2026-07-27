@@ -6,6 +6,7 @@ import { supabase, signOut, safeGetSession } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { buildAuthRedirect } from '@/lib/authFlow';
 import { resolveUserRoleClient } from '@/lib/roleResolver';
+import { getE2eState } from '@/lib/e2e';
 import type { AppRole, RoleState } from '@/types';
 
 interface AuthContextType {
@@ -43,6 +44,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
+        const e2eState = getE2eState();
+        if (e2eState?.enabled && e2eState.session) {
+            setUser(e2eState.session.user as User);
+            setUserRole(e2eState.role ?? 'unknown');
+            setLoading(false);
+            return;
+        }
+
         // Check active sessions
         safeGetSession()
             .then(({ data: { session } }) => {

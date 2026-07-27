@@ -21,6 +21,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
 import type { AppRole, RoleState } from '@/types';
+import { getE2eState } from './e2e';
 // ---------------------------------------------------------------------------
 // Core resolver (works with any Supabase client — browser or server)
 // ---------------------------------------------------------------------------
@@ -74,6 +75,11 @@ export async function resolveUserRoleClient(
     client: SupabaseClient,
     user: User | null,
 ): Promise<RoleState> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled && e2eState.role) {
+        return e2eState.role;
+    }
+
     return resolveUserRole(client, user);
 }
 

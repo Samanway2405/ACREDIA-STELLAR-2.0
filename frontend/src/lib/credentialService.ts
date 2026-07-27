@@ -7,6 +7,7 @@ import {
 } from './contracts';
 import { CREDENTIAL_HASH_ALGORITHM, CREDENTIAL_METADATA_SCHEMA_VERSION } from './credentialHash';
 import { debugLog, captureException } from './debug';
+import { getE2eState, updateE2eState } from './e2e';
 
 export interface Subject {
     id: string;
@@ -65,6 +66,53 @@ export async function issueCredential(
     ipfsHash: string;
     metadataHash: string;
 }> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        onProgress?.('upload-ipfs');
+        const fileCID = `e2e-file-${data.file.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+        const metadataPath = 'e2e-metadata-cid';
+        const tokenId = String(e2eState.nextTokenId ?? 1);
+        const transactionHash = `e2e-tx-${tokenId}`;
+
+        updateE2eState((state) => {
+            state.nextTokenId = (state.nextTokenId ?? 1) + 1;
+            state.issuedCredentials ??= [];
+            state.issuedCredentials.unshift({
+                id: `cred-${tokenId}`,
+                token_id: tokenId,
+                ipfs_hash: metadataPath,
+                blockchain_hash: transactionHash,
+                metadata: {
+                    credentialData: {
+                        studentName: data.studentName,
+                        degree: data.degree,
+                        major: data.major,
+                        gpa: data.gpa,
+                        issueDate: data.issueDate,
+                        credentialType: data.credentialType,
+                    },
+                },
+                issued_at: new Date().toISOString(),
+                revoked: false,
+                issuer_wallet_address: data.institutionWallet,
+                student_wallet_address: data.studentWallet,
+            });
+            if (state.stats) {
+                state.stats.totalCredentials += 1;
+                state.stats.activeCredentials += 1;
+            }
+        });
+
+        onProgress?.('save-database');
+
+        return {
+            tokenId,
+            transactionHash,
+            ipfsHash: fileCID,
+            metadataHash: metadataPath,
+        };
+    }
+
     try {
         onProgress?.('upload-ipfs');
         debugLog('Uploading credential file to IPFS.');
@@ -249,6 +297,27 @@ export async function revokeCredentialById(
     credentialId: string,
     issuerAddress: string,
 ): Promise<void> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        updateE2eState((state) => {
+            const credential = state.issuedCredentials?.find((entry) => entry.id === credentialId);
+            if (!credential) {
+                throw new Error('Credential not found');
+            }
+
+            if (credential.revoked) {
+                throw new Error('Credential is already revoked');
+            }
+
+            credential.revoked = true;
+            credential.blockchain_hash = credential.blockchain_hash || `e2e-revoke-${credential.token_id}`;
+            if (state.stats) {
+                state.stats.activeCredentials = Math.max(0, state.stats.activeCredentials - 1);
+            }
+        });
+        return;
+    }
+
     try {
         const credential = await getCredentialById(credentialId);
         if (!credential) {

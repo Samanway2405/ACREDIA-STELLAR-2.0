@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { safeGetSession, supabase } from '@/lib/supabase';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -107,8 +107,10 @@ export function IssuedCredentialsList({ refreshTrigger }: IssuedCredentialsListP
                 ...(dateTo   && { dateTo }),
             });
 
-            const { data: { session } } = await supabase.auth.getSession();
-const accessToken = session?.access_token;
+            const {
+                data: { session },
+            } = await safeGetSession();
+            const accessToken = session?.access_token;
 if (!accessToken) {
     setCredentials([]);
     return;

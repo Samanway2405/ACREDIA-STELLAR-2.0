@@ -14,6 +14,7 @@ import { activeNetwork, getContractAddress, sorobanServer } from './stellar';
 import { debugLog, debugWarn, captureException } from './debug';
 import { generateCanonicalCredentialHash } from './credentialHash';
 import { credentialHashHexToScVal } from './credentialHashEncoding';
+import { getE2eState, updateE2eState } from './e2e';
 
 export interface CredentialMetadata {
     studentAddress: string;
@@ -252,6 +253,11 @@ async function simulateRead(
 }
 
 export async function getContractOwner(callerAddress: string): Promise<string> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled && e2eState.contractOwner) {
+        return e2eState.contractOwner;
+    }
+
     const contractId = getContractAddress('CREDENTIAL_NFT');
     if (!contractId) {
         debugWarn('Contract address is unavailable while loading owner.');
@@ -271,6 +277,17 @@ export async function isAuthorizedIssuer(
     issuerAddress: string,
     callerAddress: string,
 ): Promise<boolean> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        return Boolean(
+            (e2eState.contractOwner &&
+                issuerAddress.toLowerCase() === e2eState.contractOwner.toLowerCase()) ||
+                e2eState.authorizedIssuers?.some(
+                    (value) => value.toLowerCase() === issuerAddress.toLowerCase(),
+                ),
+        );
+    }
+
     const contractId = getContractAddress('CREDENTIAL_NFT');
 
     try {
@@ -291,6 +308,21 @@ export async function authorizeIssuer(
     adminAddress: string,
     issuerAddress: string,
 ): Promise<string> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        updateE2eState((state) => {
+            state.contractOwner = state.contractOwner || adminAddress;
+            state.authorizedIssuers ??= [];
+            if (!state.authorizedIssuers.includes(issuerAddress)) {
+                state.authorizedIssuers.push(issuerAddress);
+            }
+            if (state.stats) {
+                state.stats.authorizedInstitutions = state.authorizedIssuers.length;
+            }
+        });
+        return 'e2e-authorize-tx';
+    }
+
     const contractId = getContractAddress('CREDENTIAL_NFT');
     const args = [new Address(issuerAddress).toScVal()];
     const result = await invokeContractMethod(contractId, 'authorize_issuer', args, adminAddress);
@@ -303,6 +335,30 @@ export async function issueCredentialOnStellar(
     ipfsUri: string,
     issuerAddress: string,
 ): Promise<{ tokenId: string; transactionHash: string }> {
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        const authorized = Boolean(
+            (e2eState.contractOwner &&
+                issuerAddress.toLowerCase() === e2eState.contractOwner.toLowerCase()) ||
+                e2eState.authorizedIssuers?.some(
+                    (value) => value.toLowerCase() === issuerAddress.toLowerCase(),
+                ),
+        );
+        if (!authorized) {
+            throw new Error('Your wallet is not authorized to issue credentials.');
+        }
+
+        const tokenId = String(e2eState.nextTokenId ?? 1);
+        updateE2eState((state) => {
+            state.nextTokenId = (state.nextTokenId ?? 1) + 1;
+        });
+
+        return {
+            tokenId,
+            transactionHash: `e2e-tx-${tokenId}`,
+        };
+    }
+
     debugLog('Issuing credential on Stellar.');
 
     const authorized = await isAuthorizedIssuer(issuerAddress, issuerAddress);
@@ -339,6 +395,10 @@ export async function revokeCredentialOnStellar(
     tokenId: string,
     issuerAddress: string,
 ): Promise<string> {
+    if (getE2eState()?.enabled) {
+        return `e2e-revoke-${normalizeTokenId(tokenId)}`;
+    }
+
     // eslint-disable-next-line no-console
     console.log('🗑️ Revoking credential on Stellar Network...');
     const contractId = getContractAddress('CREDENTIAL_NFT');
