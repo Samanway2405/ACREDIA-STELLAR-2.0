@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { format } from 'date-fns';
 import {
@@ -412,8 +413,13 @@ function CredentialCard({ credential }: { credential: Credential }) {
                         <Button onClick={() => setShowQRModal(true)} variant="outline" size="sm">
                             <QrCode className="mr-1 h-4 w-4" />QR Code
                         </Button>
+                        <Button asChild variant="default" size="sm">
+                            <Link href={`/credentials/${credential.token_id}`}>
+                                <Share2 className="mr-1 h-4 w-4" />Public Showcase
+                            </Link>
+                        </Button>
                         <Button onClick={handleShare} variant="outline" size="sm">
-                            <Share2 className="mr-1 h-4 w-4" />Share
+                            <Share2 className="mr-1 h-4 w-4" />Copy Link
                         </Button>
                         {ipfsUrl && (
                             <a href={ipfsUrl} target="_blank" rel="noopener noreferrer">
