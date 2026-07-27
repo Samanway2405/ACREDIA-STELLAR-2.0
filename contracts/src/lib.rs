@@ -639,6 +639,38 @@ mod tests {
     }
 
     #[test]
+    fn property_duplicate_hash_rejected_across_seeded_inputs() {
+        for seed in 0u8..12 {
+            let (env, contract, _, issuer, student) = setup();
+            let hash = dummy_hash(&env, seed.wrapping_add(32));
+            let ipfs = String::from_str(&env, "ipfs://duplicate-property");
+
+            env.as_contract(&contract, || {
+                AcrediaCredential::issue_credential(
+                    env.clone(),
+                    student.clone(),
+                    issuer.clone(),
+                    hash.clone(),
+                    ipfs.clone(),
+                )
+                .unwrap();
+            });
+
+            env.as_contract(&contract, || {
+                let duplicate = AcrediaCredential::issue_credential(
+                    env.clone(),
+                    student.clone(),
+                    issuer.clone(),
+                    hash.clone(),
+                    ipfs.clone(),
+                );
+
+                assert_eq!(duplicate, Err(ContractError::CredentialAlreadyExists));
+            });
+        }
+    }
+
+    #[test]
     fn test_unauthorized_issuer_rejected() {
         let (env, contract, _, _, student) = setup();
         let rogue = Address::generate(&env);
@@ -729,6 +761,35 @@ mod tests {
                 Err(ContractError::UnauthorizedRevoker)
             );
         });
+    }
+
+    #[test]
+    fn property_only_issuer_can_revoke_seeded_credentials() {
+        for seed in 0u8..12 {
+            let (env, contract, _, issuer, student) = setup();
+            let rogue = Address::generate(&env);
+            let token_id = env.as_contract(&contract, || {
+                AcrediaCredential::issue_credential(
+                    env.clone(),
+                    student.clone(),
+                    issuer.clone(),
+                    dummy_hash(&env, seed.wrapping_add(48)),
+                    String::from_str(&env, "ipfs://issuer-only-property"),
+                )
+                .unwrap()
+            });
+
+            env.as_contract(&contract, || {
+                assert_eq!(
+                    AcrediaCredential::revoke_credential(env.clone(), token_id, rogue.clone()),
+                    Err(ContractError::UnauthorizedRevoker)
+                );
+
+                AcrediaCredential::revoke_credential(env.clone(), token_id, issuer.clone())
+                    .unwrap();
+                assert!(AcrediaCredential::is_revoked(env.clone(), token_id));
+            });
+        }
     }
 
     #[test]
@@ -909,6 +970,50 @@ mod tests {
                 .expect("get_credential must survive large ledger advance");
             assert_eq!(cred2.token_id, token_id);
         });
+    }
+
+    #[test]
+    fn property_credentials_survive_large_ledger_advances() {
+        use soroban_sdk::testutils::Ledger;
+
+        for seed in 0u8..8 {
+            let (env, contract, _, issuer, student) = setup();
+            let hash = dummy_hash(&env, seed.wrapping_add(80));
+            let ipfs = String::from_str(&env, "ipfs://ttl-property");
+
+            let token_id = env.as_contract(&contract, || {
+                AcrediaCredential::issue_credential(
+                    env.clone(),
+                    student.clone(),
+                    issuer.clone(),
+                    hash.clone(),
+                    ipfs,
+                )
+                .unwrap()
+            });
+
+            if seed % 2 == 1 {
+                env.as_contract(&contract, || {
+                    AcrediaCredential::revoke_credential(env.clone(), token_id, issuer.clone())
+                        .unwrap();
+                });
+            }
+
+            env.ledger()
+                .set_sequence_number(5_000_000 + u32::from(seed) * 10_000);
+
+            env.as_contract(&contract, || {
+                let credential = AcrediaCredential::get_credential(env.clone(), token_id)
+                    .expect("credential must survive large ledger advance");
+                assert_eq!(credential.token_id, token_id);
+                assert_eq!(credential.student, student);
+                assert_eq!(credential.revoked, seed % 2 == 1);
+
+                let verified = AcrediaCredential::verify_credential(env.clone(), hash.clone())
+                    .expect("credential hash must remain indexed across TTL extensions");
+                assert_eq!(verified.token_id, token_id);
+            });
+        }
     }
 
     /// Verify that a *revoked* credential is still retrievable after a large
