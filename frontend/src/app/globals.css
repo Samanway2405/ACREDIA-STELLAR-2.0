@@ -116,14 +116,14 @@
     --brand-foreground: #ffffff;
 
     /* Brand — gold accent */
-    --gold: #c19a2e;
-    --gold-foreground: #0a2540;
+    --gold: #855b00;
+    --gold-foreground: #ffffff;
 
     /* Supporting surfaces */
     --secondary: #eef2f7;
     --secondary-foreground: #0f2136;
     --muted: #f4f6fa;
-    --muted-foreground: #5a6b80;
+    --muted-foreground: #3a4b5e;
     --accent: #eaf0f7;
     --accent-foreground: #0a2540;
 

@@ -147,13 +147,12 @@ export default function Home() {
                             <dl className="mt-12 grid grid-cols-3 gap-4 border-t border-border pt-8">
                                 {heroStats.map((stat) => (
                                     <div key={stat.label}>
-                                        <dt className="sr-only">{stat.label}</dt>
                                         <dd className="text-2xl font-bold text-foreground sm:text-3xl">
                                             {stat.value}
                                         </dd>
-                                        <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                                        <dt className="mt-1 text-xs text-muted-foreground sm:text-sm">
                                             {stat.label}
-                                        </p>
+                                        </dt>
                                     </div>
                                 ))}
                             </dl>
