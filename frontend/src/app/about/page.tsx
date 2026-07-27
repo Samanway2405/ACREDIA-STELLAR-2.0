@@ -106,7 +106,7 @@ export default function AboutPage() {
                 </section>
 
                 {/* Stats band */}
-                <section className="border-y border-border bg-secondary/40">
+                <section className="border-y border-border bg-muted">
                     <div className="container-shell grid grid-cols-2 gap-8 py-10 sm:grid-cols-4">
                         {stats.map((stat, i) => (
                             <motion.div
@@ -175,7 +175,7 @@ export default function AboutPage() {
                 </section>
 
                 {/* Architecture */}
-                <section className="section-pad bg-secondary/40">
+                <section className="section-pad bg-muted">
                     <div className="container-shell">
                         <motion.div {...fadeUp} className="mx-auto max-w-2xl text-center">
                             <span className="eyebrow justify-center">Technology</span>

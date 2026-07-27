@@ -98,8 +98,8 @@ export function CredentialUploadFormSections({
                         value={formData.credentialType}
                         onValueChange={(value) => setFormData({ ...formData, credentialType: value })}
                     >
-                        <SelectTrigger>
-                            <SelectValue />
+                        <SelectTrigger id="credentialType" aria-label="Credential Type">
+                            <SelectValue placeholder="Select credential type" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="diploma">Diploma</SelectItem>

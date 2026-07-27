@@ -3,11 +3,15 @@ import type { Page } from '@playwright/test';
 import { createE2eState, installE2eRoutes, seedE2eState } from './e2e-support';
 
 async function runAxe(page: Page) {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addStyleTag({
+        content: `*, *::before, *::after { transition: none !important; animation-duration: 0s !important; opacity: 1 !important; transform: none !important; }`,
+    });
     const axeModule = await import('axe-core');
     const axeSource = axeModule.source ?? axeModule.default.source;
     await page.addScriptTag({ content: axeSource });
     return page.evaluate(async () => {
-        const axe = (window as Window & { axe: { run: (node: Element) => Promise<{ violations: Array<{ id: string; impact?: string; help: string }> }> } }).axe;
+        const axe = (window as Window & { axe: { run: (node: Element, options: unknown) => Promise<{ violations: Array<{ id: string; impact?: string; help: string }> }> } }).axe;
         return axe.run(document.documentElement, {
             runOnly: {
                 type: 'tag',
@@ -17,12 +21,26 @@ async function runAxe(page: Page) {
     });
 }
 
-test('register and verify pages stay accessible', async ({ page }) => {
-    await page.goto('/auth/register?role=institution');
-    const registerResults = await runAxe(page);
-    expect(registerResults.violations, JSON.stringify(registerResults.violations, null, 2)).toEqual([]);
+test('core pages pass WCAG 2.1 AA accessibility audit', async ({ page }) => {
+    // Unauthenticated pages
+    await page.goto('/');
+    let results = await runAxe(page);
+    expect(results.violations, `Home page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 
-    const state = createE2eState({
+    await page.goto('/about');
+    results = await runAxe(page);
+    expect(results.violations, `About page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    await page.goto('/auth/login');
+    results = await runAxe(page);
+    expect(results.violations, `Login page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    await page.goto('/auth/register?role=institution');
+    results = await runAxe(page);
+    expect(results.violations, `Register page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    // Authenticated institution state
+    const institutionState = createE2eState({
         role: 'institution',
         walletAddress: 'GAcrediaIssuerWallet0000000000000000000000000000001',
         authorizedIssuers: ['GAcrediaIssuerWallet0000000000000000000000000000001'],
@@ -37,21 +55,44 @@ test('register and verify pages stay accessible', async ({ page }) => {
                         studentName: 'Ada Lovelace',
                         degree: 'Bachelor of Science',
                         credentialType: 'diploma',
-                        issueDate: '2026-07-27',
+                        issueDate: '2024-01-01',
                     },
                 },
                 issued_at: new Date().toISOString(),
                 revoked: false,
                 issuer_wallet_address: 'GAcrediaIssuerWallet0000000000000000000000000000001',
-                student_wallet_address: 'GAcrediaStudentWallet000000000000000000000000000000',
+                student_wallet_address: 'GBSVJNVIAGQEAK3WAAVGXSMT7BMLI4SHAJWKKMRCMJIYG7XESR4ANDZD',
             },
         ],
     });
 
-    await seedE2eState(page, state);
+    await seedE2eState(page, institutionState);
     await installE2eRoutes(page);
 
+    await page.goto('/dashboard');
+    results = await runAxe(page);
+    expect(results.violations, `Dashboard page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
     await page.goto('/verify?token=1');
-    const verifyResults = await runAxe(page);
-    expect(verifyResults.violations, JSON.stringify(verifyResults.violations, null, 2)).toEqual([]);
+    results = await runAxe(page);
+    expect(results.violations, `Verify page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    // Authenticated admin state
+    const adminState = createE2eState({
+        role: 'admin',
+        walletAddress: 'GAcrediaAdminWallet00000000000000000000000000000001',
+        contractOwner: 'GAcrediaAdminWallet00000000000000000000000000000001',
+        authorizedIssuers: [],
+        session: {
+            user: { id: 'admin-user-1', email: 'admin@acredia.test' },
+            access_token: 'e2e-admin-token',
+        },
+    });
+
+    await seedE2eState(page, adminState);
+    await installE2eRoutes(page);
+
+    await page.goto('/admin');
+    results = await runAxe(page);
+    expect(results.violations, `Admin page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 });
