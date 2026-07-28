@@ -36,13 +36,21 @@ const footerNav: { heading: string; links: { label: string; href: string; extern
             { label: 'Stellar Explorer', href: 'https://stellar.expert', external: true },
         ],
     },
+    {
+        heading: 'Legal',
+        links: [
+            { label: 'Privacy Policy', href: '/legal/privacy' },
+            { label: 'Terms of Service', href: '/legal/terms' },
+            { label: 'Data Processing Agreement', href: '/legal/dpa' },
+        ],
+    },
 ];
 
 export function SiteFooter() {
     return (
         <footer className="border-t border-border bg-secondary/40">
             <div className="container-shell py-14">
-                <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+                <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
                     <div className="max-w-xs">
                         <Link href="/" className="flex items-center gap-2.5" aria-label="Acredia home">
                             <Image

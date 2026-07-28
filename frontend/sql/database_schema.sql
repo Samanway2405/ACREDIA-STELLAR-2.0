@@ -63,7 +63,10 @@ CREATE TABLE IF NOT EXISTS public.verification_logs (
 );
 
 COMMENT ON TABLE public.verification_logs IS
-    'Privacy-safe audit log for public verification attempts. Store coarse outcomes and hashed request identifiers only.';
+    'Privacy-safe audit log for public verification attempts. '
+    'Stores coarse outcomes and hashed request identifiers only — no PII. '
+    'Retention policy: rows are automatically purged after 90 days by '
+    'public.purge_old_verification_logs() (scheduled via pg_cron).';
 
 CREATE INDEX IF NOT EXISTS idx_institutions_auth_user       ON public.institutions (auth_user_id);
 CREATE INDEX IF NOT EXISTS idx_institutions_wallet          ON public.institutions (wallet_address);

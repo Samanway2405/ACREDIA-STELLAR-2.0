@@ -150,3 +150,35 @@ export async function decryptBufferAESGCM(payload: EncryptedPayload, secretKeyHe
     return new Uint8Array(decryptedBuffer);
 }
 
+/**
+ * Unpin a CID from Pinata so the content is no longer served over IPFS.
+ * Called during GDPR erasure to make previously-pinned credential documents
+ * inaccessible. Returns true if the unpin succeeded, false if the CID was
+ * not found (already unpinned / never pinned), and throws for other errors.
+ */
+export async function unpinFromPinata(cid: string): Promise<boolean> {
+    const jwt = requirePinataJwt();
+
+    const response = await fetch(`${PINATA_API_BASE}/unpin/${encodeURIComponent(cid)}`, {
+        method: 'DELETE',
+        headers: {
+            Authorization: `Bearer ${jwt}`,
+        },
+    });
+
+    if (response.status === 404 || response.status === 400) {
+        // CID was never pinned by this account or already unpinned — not an error.
+        return false;
+    }
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        captureException(new Error(`Pinata unpin failed: ${response.status} ${errorBody}`), {
+            context: 'unpinFromPinata',
+            cid,
+        });
+        throw new Error('Pinata unpin failed.');
+    }
+
+    return true;
+}

@@ -85,7 +85,10 @@ CREATE TABLE IF NOT EXISTS public.verification_logs (
 );
 
 COMMENT ON TABLE public.verification_logs IS
-    'Privacy-safe audit log for public verification attempts. Store coarse outcomes and hashed request identifiers only.';
+    'Privacy-safe audit log for public verification attempts. '
+    'Stores coarse outcomes and hashed request identifiers only — no PII. '
+    'Retention policy: rows are automatically purged after 90 days by '
+    'public.purge_old_verification_logs() (scheduled via pg_cron).';
 
 -- ---------------------------------------------------------------------
 -- Credentials: ensure hash/version columns exist (for older DBs)
@@ -311,6 +314,9 @@ DROP POLICY IF EXISTS "Anyone can view verification logs"               ON publi
 DROP POLICY IF EXISTS "Admin can view verification logs"                ON public.verification_logs;
 DROP POLICY IF EXISTS "Admin can insert verification logs"              ON public.verification_logs;
 
+DROP POLICY IF EXISTS "Users can view own erasure requests"             ON public.erasure_requests;
+DROP POLICY IF EXISTS "Admin can view all erasure requests"             ON public.erasure_requests;
+
 -- ---------------------------------------------------------------------
 -- Profiles policies
 -- ---------------------------------------------------------------------
@@ -435,6 +441,38 @@ CREATE POLICY "Admin can view verification logs"
 CREATE POLICY "Admin can insert verification logs"
   ON public.verification_logs FOR INSERT
   WITH CHECK (public.is_admin());
+
+-- ---------------------------------------------------------------------
+-- Erasure requests table (created by gdpr_erasure.sql; policies here
+-- ensure idempotent policy management in this consolidated setup file)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.erasure_requests (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    auth_user_id    UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    requested_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    completed_at    TIMESTAMP WITH TIME ZONE,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    failure_reason  TEXT
+);
+
+COMMENT ON TABLE public.erasure_requests IS
+    'Data-subject right-to-erasure requests (GDPR Art. 17). '
+    'A row is inserted when a user submits a deletion request and updated '
+    'to completed once the server-side erasure process finishes.';
+
+CREATE INDEX IF NOT EXISTS idx_erasure_requests_user
+    ON public.erasure_requests (auth_user_id, status);
+
+ALTER TABLE IF EXISTS public.erasure_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own erasure requests"
+    ON public.erasure_requests FOR SELECT
+    USING (auth.uid() = auth_user_id);
+
+CREATE POLICY "Admin can view all erasure requests"
+    ON public.erasure_requests FOR SELECT
+    USING (public.is_admin());
 
 COMMIT;
 
