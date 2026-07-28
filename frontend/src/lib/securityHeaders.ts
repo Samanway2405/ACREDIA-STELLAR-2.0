@@ -7,6 +7,10 @@ export interface SecurityHeader {
 // Content Security Policy directives
 // ──────────────────────────────────────────────────────────────────────────────
 //
+// Resolves Issue #91 — ensures the app ships with CSP, HSTS, X-Frame-Options,
+// X-Content-Type-Options, Referrer-Policy, and Permissions-Policy for a
+// wallet-connected credential app.
+//
 // When adding a new external integration (image CDN, API endpoint, IPFS gateway,
 // wallet provider, etc.):
 //
