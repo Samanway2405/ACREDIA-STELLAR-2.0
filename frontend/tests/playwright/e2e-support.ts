@@ -1,4 +1,4 @@
-import type { Page, Route } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import type { E2eAdminStats, E2eState } from '@/lib/e2e';
 
 export function createE2eState(overrides: Partial<E2eState> = {}): E2eState {

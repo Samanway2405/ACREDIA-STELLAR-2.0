@@ -8,7 +8,6 @@ import {
     Calendar,
     CheckCircle2,
     Download,
-    ExternalLink,
     Lock,
     QrCode,
     Share2,
