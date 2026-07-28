@@ -80,8 +80,33 @@ CREATE INDEX IF NOT EXISTS idx_verification_logs_created_at ON public.verificati
 CREATE INDEX IF NOT EXISTS idx_verification_logs_result_type
     ON public.verification_logs ((verification_result->>'result_type'));
 
+CREATE TABLE IF NOT EXISTS public.jobs (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name             TEXT NOT NULL,
+    payload          JSONB NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    max_attempts     INTEGER NOT NULL DEFAULT 3,
+    run_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    locked_at        TIMESTAMP WITH TIME ZONE,
+    locked_by        TEXT,
+    error_log        TEXT,
+    idempotency_key  TEXT UNIQUE,
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.jobs IS
+    'Postgres-backed job queue for background asynchronous tasks (re-pinning, indexing, notifications).';
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status_run_at 
+    ON public.jobs (status, run_at) 
+    WHERE status = 'pending';
+
 ALTER TABLE IF EXISTS public.profiles          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.institutions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.students          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.credentials       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.verification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.jobs              ENABLE ROW LEVEL SECURITY;
