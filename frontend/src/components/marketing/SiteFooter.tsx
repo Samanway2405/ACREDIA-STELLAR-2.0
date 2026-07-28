@@ -14,6 +14,7 @@ const footerNav: { heading: string; links: { label: string; href: string; extern
     {
         heading: 'Product',
         links: [
+            { label: 'Verified Issuers', href: '/issuers' },
             { label: 'Verify a credential', href: '/verify' },
             { label: 'For institutions', href: '/solutions/institutions' },
             { label: 'For students', href: '/solutions/students' },
