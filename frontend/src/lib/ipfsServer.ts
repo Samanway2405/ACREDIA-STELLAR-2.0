@@ -1,5 +1,5 @@
 import { serverRuntimeConfig } from './runtimeConfig';
-import { captureException } from './debug';
+import { captureException, recordMetric } from './debug';
 
 const PINATA_API_BASE = 'https://api.pinata.cloud/pinning';
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -72,6 +72,7 @@ export function validatePinataJson(content: unknown): string | null {
 
 export async function pinFileToPinata(file: File): Promise<string> {
     const jwt = requirePinataJwt();
+    const startedAt = Date.now();
     const formData = new FormData();
     formData.append('file', file, file.name);
     formData.append('pinataMetadata', JSON.stringify({ name: file.name }));
@@ -87,15 +88,18 @@ export async function pinFileToPinata(file: File): Promise<string> {
 
     if (!response.ok) {
         const errorBody = await response.text();
+        recordMetric('ipfs.pin_file.error', 1, { status: response.status });
         captureException(new Error(`Pinata file upload failed: ${response.status} ${errorBody}`), { context: 'pinFileToPinata' });
         throw new Error('Pinata file upload failed.');
     }
 
+    recordMetric('ipfs.pin_file.latency_ms', Date.now() - startedAt, { status: response.status });
     return parsePinataCid(await response.json());
 }
 
 export async function pinJsonToPinata(content: unknown): Promise<string> {
     const jwt = requirePinataJwt();
+    const startedAt = Date.now();
 
     const response = await fetch(`${PINATA_API_BASE}/pinJSONToIPFS`, {
         method: 'POST',
@@ -112,10 +116,12 @@ export async function pinJsonToPinata(content: unknown): Promise<string> {
 
     if (!response.ok) {
         const errorBody = await response.text();
+        recordMetric('ipfs.pin_json.error', 1, { status: response.status });
         captureException(new Error(`Pinata JSON upload failed: ${response.status} ${errorBody}`), { context: 'pinJsonToPinata' });
         throw new Error('Pinata JSON upload failed.');
     }
 
+    recordMetric('ipfs.pin_json.latency_ms', Date.now() - startedAt, { status: response.status });
     return parsePinataCid(await response.json());
 }
 

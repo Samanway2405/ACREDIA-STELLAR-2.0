@@ -6,7 +6,7 @@ import {
     revokeCredentialOnStellar,
 } from './contracts';
 import { CREDENTIAL_HASH_ALGORITHM, CREDENTIAL_METADATA_SCHEMA_VERSION } from './credentialHash';
-import { debugLog, captureException } from './debug';
+import { debugLog, captureException, recordMetric } from './debug';
 import { getE2eState, updateE2eState } from './e2e';
 
 export interface Subject {
@@ -246,6 +246,10 @@ export async function issueCredential(
         }
 
         debugLog('Credential saved to the database.');
+        recordMetric('issuance.success', 1, {
+            credentialType: data.credentialType,
+            institutionId: data.institutionId,
+        });
 
         return {
             tokenId,
@@ -254,6 +258,10 @@ export async function issueCredential(
             metadataHash: metadataPath,
         };
     } catch (error) {
+        recordMetric('issuance.failure', 1, {
+            credentialType: data.credentialType,
+            institutionId: data.institutionId,
+        });
         captureException(error, { context: 'issueCredential_service' });
         throw error;
     }

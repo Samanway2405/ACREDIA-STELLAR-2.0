@@ -73,12 +73,56 @@ export function structuredLog(
             console.error(JSON.stringify(logPayload));
         } else if (level === 'WARN') {
             console.warn(JSON.stringify(logPayload));
-        } else if (isDebugLoggingEnabled()) {
-            console.log(JSON.stringify(logPayload));
+        } else {
+            console.info(JSON.stringify(logPayload));
         }
     } catch (e) {
         console.error('Error in structuredLog:', e);
     }
+}
+
+function getObservabilityIngestUrl(): string | undefined {
+    return process.env.NEXT_PUBLIC_OBSERVABILITY_INGEST_URL || process.env.OBSERVABILITY_INGEST_URL;
+}
+
+function sendObservabilityEvent(payload: Record<string, unknown>) {
+    const ingestUrl = getObservabilityIngestUrl();
+    if (!ingestUrl) return;
+
+    try {
+        const body = JSON.stringify(scrubSensitiveData(payload));
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+            navigator.sendBeacon(ingestUrl, new Blob([body], { type: 'application/json' }));
+            return;
+        }
+
+        void fetch(ingestUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            keepalive: true,
+        });
+    } catch (e) {
+        console.error('Error in sendObservabilityEvent:', e);
+    }
+}
+
+export function recordMetric(
+    name: string,
+    value: number,
+    context?: Record<string, unknown>
+) {
+    const payload = {
+        timestamp: new Date().toISOString(),
+        level: 'INFO',
+        event: 'metric',
+        metric: name,
+        value,
+        context: scrubSensitiveData(context),
+    };
+
+    console.info(JSON.stringify(payload));
+    sendObservabilityEvent(payload);
 }
 
 export function captureException(error: unknown, context?: Record<string, unknown>) {
@@ -90,12 +134,14 @@ export function captureException(error: unknown, context?: Record<string, unknow
         const payload = {
             timestamp: new Date().toISOString(),
             level: 'FATAL',
+            event: 'exception',
             message: errorMessage,
             stack: errorStack,
             context: cleanContext,
         };
 
         console.error(JSON.stringify(payload));
+        sendObservabilityEvent(payload);
     } catch (e) {
         console.error('Error in captureException:', e);
     }

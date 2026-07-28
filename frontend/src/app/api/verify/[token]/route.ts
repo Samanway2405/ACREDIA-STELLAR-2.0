@@ -13,6 +13,7 @@ import {
     writeVerificationAuditLog,
     type VerificationResultType,
 } from '@/lib/verificationAudit';
+import { captureException, recordMetric } from '@/lib/debug';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,6 +80,14 @@ async function logVerificationAttempt(
         errorCategory?: string;
     } = {},
 ) {
+    recordMetric('verification.attempt', 1, {
+        resultType,
+        statusCode,
+        credentialId: options.credentialId,
+        chain: options.chain,
+        errorCategory: options.errorCategory,
+    });
+
     if (!supabase || !token) {
         return;
     }
@@ -99,6 +108,7 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ token: string }> },
 ) {
+    const requestId = request.headers.get('x-request-id') || 'unknown';
     let supabase: ServiceRoleClient | null = null;
     let token: string | null = null;
     let credentialId: string | null = null;
@@ -265,6 +275,7 @@ export async function GET(
         });
     } catch (err: unknown) {
         if (err instanceof ContractConfigurationError) {
+            captureException(err, { requestId, context: 'GET /api/verify/[token]' });
             await logVerificationAttempt(supabase, request, token, 'chain_unavailable', 500, {
                 credentialId,
                 errorCategory: 'contract_configuration',
@@ -277,6 +288,7 @@ export async function GET(
         }
 
         if (err instanceof BlockchainUnavailableError) {
+            captureException(err, { requestId, context: 'GET /api/verify/[token]' });
             await logVerificationAttempt(supabase, request, token, 'chain_unavailable', 503, {
                 credentialId,
                 errorCategory: 'contract_read_failed',
@@ -292,6 +304,7 @@ export async function GET(
             credentialId,
             errorCategory: 'unexpected_error',
         });
+        captureException(err, { requestId, context: 'GET /api/verify/[token]' });
 
         return NextResponse.json(
             { success: false, error: 'Internal server error' },
