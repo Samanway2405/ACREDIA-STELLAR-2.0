@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
             .update({
                 wallet_address: normalizedWallet,
                 verified: false,
+                status: 'pending',
                 authorization_tx_hash: null,
             })
             .eq('id', institution.id)

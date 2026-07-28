@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
             // Update existing institution to mark as verified and store transaction hash
             const updateData = {
                 verified: true,
+                status: 'verified',
                 authorization_tx_hash: verification.transactionHash,
             };
 
