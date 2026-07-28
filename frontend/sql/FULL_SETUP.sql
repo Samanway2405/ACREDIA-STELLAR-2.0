@@ -208,6 +208,45 @@ REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 
 -- ---------------------------------------------------------------------
+-- Function: next_job(p_worker_id text)
+-- Picks and locks the next pending job that is ready to run.
+-- Uses FOR UPDATE SKIP LOCKED to prevent multiple workers from picking
+-- the same job concurrently.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.next_job(p_worker_id text)
+RETURNS SETOF public.jobs
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_job_id uuid;
+BEGIN
+    SELECT id INTO v_job_id
+    FROM public.jobs
+    WHERE status = 'pending' AND run_at <= NOW()
+    ORDER BY run_at ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED;
+
+    IF v_job_id IS NOT NULL THEN
+        UPDATE public.jobs
+        SET status = 'processing',
+            locked_at = NOW(),
+            locked_by = p_worker_id,
+            attempts = attempts + 1,
+            updated_at = NOW()
+        WHERE id = v_job_id;
+
+        RETURN QUERY SELECT * FROM public.jobs WHERE id = v_job_id;
+    END IF;
+END;
+$$;
+
+-- next_job is NOT accessible to public / authenticated users.
+REVOKE ALL ON FUNCTION public.next_job(text) FROM PUBLIC;
+
+-- ---------------------------------------------------------------------
 -- Triggers (drop-before-create so re-runs are clean)
 -- ---------------------------------------------------------------------
 DROP TRIGGER IF EXISTS prevent_profile_role_escalation ON public.profiles;
@@ -275,6 +314,7 @@ ALTER TABLE IF EXISTS public.institutions      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.students          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.credentials       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.verification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.jobs              ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------
 -- Drop any legacy / permissive policies before recreating (idempotent)
@@ -316,6 +356,9 @@ DROP POLICY IF EXISTS "Admin can insert verification logs"              ON publi
 
 DROP POLICY IF EXISTS "Users can view own erasure requests"             ON public.erasure_requests;
 DROP POLICY IF EXISTS "Admin can view all erasure requests"             ON public.erasure_requests;
+
+DROP POLICY IF EXISTS "Admin can view jobs"                             ON public.jobs;
+DROP POLICY IF EXISTS "Admin can manage jobs"                           ON public.jobs;
 
 -- ---------------------------------------------------------------------
 -- Profiles policies
@@ -473,6 +516,43 @@ CREATE POLICY "Users can view own erasure requests"
 CREATE POLICY "Admin can view all erasure requests"
     ON public.erasure_requests FOR SELECT
     USING (public.is_admin());
+
+-- ---------------------------------------------------------------------
+-- Job queue table (created by job_queue.sql; policies here
+-- ensure idempotent policy management in this consolidated setup file)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.jobs (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name             TEXT NOT NULL,
+    payload          JSONB NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    max_attempts     INTEGER NOT NULL DEFAULT 3,
+    run_at           TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    locked_at        TIMESTAMP WITH TIME ZONE,
+    locked_by        TEXT,
+    error_log        TEXT,
+    idempotency_key  TEXT UNIQUE,
+    created_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE public.jobs IS
+    'Postgres-backed job queue for background asynchronous tasks (re-pinning, indexing, notifications).';
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status_run_at 
+    ON public.jobs (status, run_at) 
+    WHERE status = 'pending';
+
+CREATE POLICY "Admin can view jobs"
+    ON public.jobs FOR SELECT
+    USING (public.is_admin());
+
+CREATE POLICY "Admin can manage jobs"
+    ON public.jobs FOR ALL
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
 
 COMMIT;
 
