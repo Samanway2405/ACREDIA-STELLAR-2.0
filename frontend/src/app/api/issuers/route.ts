@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
  * }
  */
 export async function GET(request: NextRequest) {
-    const rateLimitResponse = enforceRateLimit(request, {
+    const rateLimitResponse = await enforceRateLimit(request, {
         windowSeconds: 60,
         maxRequests: 60,
         prefix: 'issuers-public',

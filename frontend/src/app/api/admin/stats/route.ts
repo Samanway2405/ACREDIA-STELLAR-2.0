@@ -15,7 +15,7 @@ const ADMIN_STATS_RATE_LIMIT = {
 export async function GET(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
     try {
-        const rateLimitResponse = enforceRateLimit(request, ADMIN_STATS_RATE_LIMIT);
+        const rateLimitResponse = await enforceRateLimit(request, ADMIN_STATS_RATE_LIMIT);
         if (rateLimitResponse) {
             return rateLimitResponse;
         }

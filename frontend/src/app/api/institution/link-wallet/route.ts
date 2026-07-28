@@ -25,7 +25,7 @@ function getAccessToken(request: NextRequest): string {
 export async function POST(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
     try {
-        const rateLimitResponse = enforceRateLimit(request, INSTITUTION_LINK_WALLET_RATE_LIMIT);
+        const rateLimitResponse = await enforceRateLimit(request, INSTITUTION_LINK_WALLET_RATE_LIMIT);
         if (rateLimitResponse) {
             return rateLimitResponse;
         }
