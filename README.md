@@ -6,7 +6,7 @@
   
   *Secure, Transparent, and Tamper-Proof Educational Credentials on Stellar Network*
 
-![Next.js](https://img.shields.io/badge/Next.js_15-000000?style=for-the-badge&logo=next.js)
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=for-the-badge&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript)
 ![Soroban](https://img.shields.io/badge/Soroban-393939?style=for-the-badge&logo=stellar)
 ![Stellar](https://img.shields.io/badge/Stellar_Network-05192E?style=for-the-badge)
@@ -21,8 +21,9 @@
 
 [🌐 Stellar Network](https://stellar.org) | [📊 Stellar Expert Explorer](https://stellar.expert) | [💧 Get Test XLM](https://laboratory.stellar.org/)
 
-<h3><a href="https://acredia-stellar-tau.vercel.app/"> 🌐 VIEW LIVE DEMO </a></h3>
-<h3><a href="https://youtu.be/CG7UF-_Du2Y"> 📽️ VIEW LIVE DEMO </a></h3>
+**[🌐 Live app (Stellar testnet)](https://acredia-stellar-tau.vercel.app/)**
+
+[Product Vision](docs/product/vision.md) · [Architecture](docs/architecture.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 </div>
 
@@ -34,7 +35,7 @@
 - [Why Stellar Network](#-why-stellar-network)
 - [The Problem](#-the-problem)
 - [Our Solution](#-our-solution)
-- [Screenshots](#-screenshots)
+- [Who Benefits](#-who-benefits)
 - [Key Features](#-key-features)
 - [Smart Contracts](#-smart-contracts)
 - [Technology Stack](#-technology-stack)
@@ -45,12 +46,18 @@
 - [Environment Setup](#-environment-setup)
 - [Usage Guide](#-usage-guide)
 - [Project Structure](#-project-structure)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
 
 ---
 
 ## 🌟 Overview
 
-**Acredia** is a revolutionary decentralized platform that transforms how academic credentials are issued, stored, and verified. Built on **Stellar Network**, a decentralized network focused on financial inclusivity and fast, low-cost transfers, Acredia leverages blockchain technology, IPFS, and modern web technologies to eliminate credential fraud, reduce verification time, and provide lifetime access to verified academic records.
+**Acredia** is a decentralized platform that transforms how academic credentials are issued, stored, and verified. Built on the **Stellar network** — designed for fast, low-cost, globally accessible transactions — Acredia combines a Soroban smart contract, IPFS storage, and a modern web app to eliminate credential fraud, cut verification time from days to seconds, and give students lifetime ownership of their records.
+
+> **Vision.** The trust layer for academic credentials: institutions issue tamper-proof credentials, students own them for life, and anyone verifies them in seconds — for free.
+>
+> For the full product vision, personas, differentiators, and business model, see **[docs/product/vision.md](docs/product/vision.md)**.
 
 ### Why Acredia?
 
@@ -158,47 +165,18 @@ This architecture ensures credentials are:
 
 ---
 
-## 📸 Screenshots
+## 👥 Who Benefits
 
-### Landing Page
+Acredia connects four roles around a single, shared source of truth. See the
+[Usage Guide](#-usage-guide) for detailed walkthroughs and
+[`docs/product/vision.md`](docs/product/vision.md) for the full product vision, personas, and business model.
 
-<img src="frontend/public/hero.png" alt="Acredia Landing Page" width="800"/>
-
-_Modern, responsive landing page showcasing the platform's features_
-
-### Student Dashboard
-
-<img src="frontend/public/student-dashboard.png" alt="Student Dashboard" width="800"/>
-
-_Students can view all their credentials with detailed information and blockchain verification_
-
-### Institution Dashboard
-
-<img src="frontend/public/instituion-dashboard.png" alt="Institution Dashboard" width="800"/>
-
-_Institutions can issue credentials with subject-wise marks, grades, and complete academic records_
-
-### Credential Verification
-
-<img src="frontend/public/verify1.png" alt="Verification Page" width="800"/>
-
-_Public verification page with blockchain proof and comprehensive credential details_
-
-<img src="frontend/public/verify2.png" alt="Verification Details" width="800"/>
-
-_Detailed subject-wise performance and blockchain transaction information_
-
-### Admin Panel
-
-<img src="frontend/public/admin-dashboard.png" alt="Admin Panel" width="800"/>
-
-_Contract owner dashboard for authorizing institutions and monitoring system statistics_
-
-### IPFS Decentralized Storage
-
-<img src="frontend/public/ipfs-view.png" alt="IPFS File View" width="800"/>
-
-_Credential files and JSON metadata are permanently anchored on the decentralized IPFS network via Pinata_
+| Role | What they get | How they use it |
+|---|---|---|
+| **🏛 Institutions** (universities, colleges, bootcamps, cert bodies) | Fraud-proof credentials and near-zero verification overhead. | 1. Get approved as an authorized issuer → 2. Connect a Stellar wallet → 3. Fill the issuance form (student, degree, subjects, document) → 4. Sign the transaction to mint the credential on-chain and pin the document to IPFS. Revoke anytime. |
+| **🎓 Students / graduates** | Lifelong, portable ownership of their achievements. | 1. Sign up and link a wallet → 2. Receive credentials directly in the dashboard → 3. Share a verification link or QR code with employers → 4. Export/download the credential whenever needed. |
+| **✅ Verifiers** (employers, ATS, admissions) | Instant, free authenticity checks. | 1. Open the shared link or scan the QR (or enter a token ID) on `/verify` → 2. See authenticity, revocation status, and credential details in seconds — **no account required**. |
+| **🛡 Admins / operators** | Governance of who can be trusted to issue. | 1. Review institution applications → 2. Authorize legitimate issuers on-chain → 3. Monitor issuance/verification statistics. |
 
 ---
 
@@ -239,9 +217,7 @@ _Credential files and JSON metadata are permanently anchored on the decentralize
 
 ## 📜 Smart Contracts
 
-Acredia uses a unified Soroban smart contract deployed on **Stellar Network**:
-
-<img src="frontend/public/deployment-proof.png" alt="Deployment Proof Output" width="800"/>
+Acredia uses a single unified Soroban smart contract, `AcrediaCredential`, written in Rust and deployed on the **Stellar network**.
 
 ### ✅ AcrediaCredential Contract — Live on Testnet
 
@@ -290,7 +266,9 @@ This single contract replaces two separate EVM contracts (CredentialNFT + Creden
 **Horizon API**: `https://horizon-testnet.stellar.org`  
 **Block Explorer**: [Stellar Expert (Testnet)](https://stellar.expert/explorer/testnet)
 
-### Stellar Mainnet Deployment (Production)
+### Stellar Mainnet (Deferred — testnet now, mainnet later)
+
+Acredia is **production-ready on Stellar testnet today**. Mainnet deployment is intentionally deferred — going live is a **configuration switch** (`NEXT_PUBLIC_STELLAR_NETWORK` + contract addresses) once the mainnet-readiness checklist (independent contract audit, key custody, keeper strategy — see the [roadmap backlog](ISSUE_DRAFTS.md)) is complete. Mainnet endpoints, for reference:
 
 **Network**: Stellar Public Network  
 **RPC Endpoint**: `https://soroban-mainnet.stellar.org`  
@@ -311,44 +289,25 @@ All deployments, metadata hashes, and transaction executions can be publicly ver
 
 ## 🛠 Technology Stack
 
-### Frontend
-
-- **Next.js 16** - React framework with App Router for optimal performance
-- **TypeScript** - Type-safe development
-- **Tailwind CSS** - Utility-first styling
-- **Radix UI** - Accessible component primitives
-- **Stellar SDK** - Wallet connection and blockchain interactions
-- **Lucide React** - Modern icon library
-
-### Blockchain (Stellar)
-
-- **Rust** - Language for Soroban smart contracts
-- **Soroban SDK** - Smart contract development on Stellar
-- **Stellar Network** - Distributed ledger for credential management
-- **Stellar SDK (JavaScript/Python)** - Client library for blockchain interactions
-- **Horizon API** - REST API for Stellar network queries
-
-### Storage & Backend
-
-- **IPFS** - Decentralized metadata storage via Pinata
-- **Supabase** - PostgreSQL database with Row Level Security
-- **PostgreSQL** - Relational database for indexing
-- **RESTful APIs** - Custom API routes in Next.js
-
-### Development Tools
-
-- **npm** - Package manager used by `frontend/package-lock.json`
-- **ESLint** - Code quality
-- **Prettier** - Code formatting
-- **Git** - Version control
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript | Web app + server API routes |
+| **UI / styling** | Tailwind CSS v4, Radix UI, Framer Motion, Lucide | Design system, accessible primitives, motion, icons |
+| **Auth** | Supabase Auth | Email/password sessions and JWTs |
+| **Wallet** | Freighter (`@stellar/freighter-api`) | Stellar wallet connection & transaction signing |
+| **Smart contract** | Rust + Soroban SDK | `AcrediaCredential` — issuance, authorization, revocation |
+| **Blockchain** | Stellar (testnet) · Soroban RPC · Horizon | Ledger, contract calls, network queries |
+| **Client SDK** | `@stellar/stellar-sdk` | Build / simulate / submit transactions, read contract state |
+| **Storage** | IPFS via Pinata | Credential documents & metadata (encryption on the roadmap) |
+| **Database** | Supabase (PostgreSQL) + Row Level Security | Off-chain index: profiles, credentials, verification logs |
+| **Testing** | Vitest, Cargo test, `@vitest/coverage-v8` | Frontend, contract, and coverage |
+| **Tooling** | npm, ESLint, Prettier, Stellar CLI, GitHub Actions | Dev, lint/format, deploy, CI |
 
 ---
 
 ## 🧪 Testing Strategy
 
-Acredia employs a rigorous testing methodology to ensure absolute security and reliability before deployment on the Stellar Network:
-
-<img src="frontend/public/test-proof.png" alt="Test Proof Output" width="800"/>
+Acredia employs a layered testing methodology across the smart contract, the frontend, and the Stellar SDK integration.
 
 ### 1. Smart Contract Constraints (Rust)
 - **DataKey Validation**: Utilizing `#[contracttype]` enumerations rigorously enforces that unique contract state keys are tightly managed off-ledger, avoiding standard library allocation exceptions (`no_std`) required by Soroban.
@@ -370,45 +329,40 @@ Comprehensive unit testing utilizing `vitest` covering all utility logic nativel
 ## 🏗 System Architecture
 
 ```mermaid
-graph TB
-    subgraph "Frontend Layer"
-        A[Next.js Application]
-        B[React Components]
-        C[Stellar SDK]
-    end
+graph TD
+    U["Student · Institution · Verifier"]
+    FE["Next.js App (React 19)"]
+    FW["Freighter Wallet"]
+    API["Next.js API Routes"]
+    AUTH["Supabase Auth"]
+    DB[("Supabase Postgres + RLS")]
+    IPFS[("IPFS via Pinata")]
+    SC["AcrediaCredential (Soroban)"]
+    L[("Stellar Ledger")]
 
-    subgraph "Blockchain Layer"
-        D[AcrediaCredential Contract]
-        F[Stellar Network Ledger]
-    end
+    U --> FE
+    FE --> AUTH
+    FE --> FW
+    FE --> API
+    FE -->|"read / verify (RPC)"| SC
+    FW -->|"sign issue / revoke tx"| SC
+    API --> DB
+    API --> IPFS
+    SC --> L
 
-    subgraph "Storage Layer"
-        G[IPFS Network]
-        H[Pinata IPFS Gateway]
-    end
-
-    subgraph "Database Layer"
-        I[Supabase PostgreSQL]
-        J[Row Level Security]
-    end
-
-    A --> B
-    B --> C
-    C --> D
-    C --> E
-    D --> F
-    E --> F
-    A --> H
-    H --> G
-    A --> I
-    I --> J
-
-    style A fill:#0ea5e9
-    style D fill:#f59e0b
-    style E fill:#f59e0b
-    style G fill:#8b5cf6
-    style I fill:#10b981
+    style FE fill:#0ea5e9,color:#fff
+    style SC fill:#f59e0b,color:#000
+    style IPFS fill:#8b5cf6,color:#fff
+    style DB fill:#10b981,color:#fff
+    style AUTH fill:#10b981,color:#fff
 ```
+
+> **Deeper dive:** see [`docs/architecture.md`](docs/architecture.md) for component responsibilities and the full issue / verify / revoke data flows.
+
+**Data flow (summary)**
+- **Issue:** institution fills the form → document + metadata pinned to IPFS → SHA-256 hash computed over the canonical payload → issuer signs `issue_credential(student, issuer, hash, ipfs_uri)` via Freighter → the credential is written on-chain and indexed in Postgres.
+- **Verify:** anyone opens `/verify` (token/QR) → the app reads the credential from the contract via Soroban RPC → shows authenticity + revocation status; a privacy-safe entry is recorded in `verification_logs`.
+- **Revoke:** the original issuer signs `revoke_credential(token_id, issuer)` → the on-chain record is flagged revoked (still readable, so verifiers see "revoked" not "missing") → the index is updated.
 
 ### Architecture Layers
 
@@ -889,8 +843,9 @@ The base `frontend/sql/database_schema.sql` file is retained as a schema referen
 frontend/
 ├── public/
 │   ├── logo.png                    # Acredia logo
-│   ├── Acredia.png                 # Brand assets
-│   └── screenshots/                # UI screenshots
+│   ├── Acredia.png                 # Brand logo (favicon/icon source)
+│   ├── favicon.ico / icon.png      # Site icons
+│   └── auth-illustration.png       # Marketing illustration
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx               # Landing page
@@ -1123,6 +1078,8 @@ npm test
 
 ## 🚧 Roadmap
 
+> The full, current production & market backlog (25 issues covering privacy, standards, indexer/worker, verification API, docs, and more) lives in **[ISSUE_DRAFTS.md](ISSUE_DRAFTS.md)**. The phases below are a high-level summary.
+
 ### Phase 1: Core Features ✅
 
 - [x] Smart contract development
@@ -1203,9 +1160,24 @@ npm test
 - Ensure IPFS metadata contains subjects array
 - Check IPFS gateway is accessible
 
-## 📄 License
+## 📚 Documentation
 
-## License
+Deeper documentation lives under [`docs/`](docs/):
+
+- **[Product Vision & Positioning](docs/product/vision.md)** — what Acredia is, who it's for, personas, differentiators, and the business model.
+- **[Architecture](docs/architecture.md)** — components, layers, and the issue / verify / revoke data flows.
+- **[Contract reference](contracts/README.md)** — the Soroban `AcrediaCredential` contract, storage/TTL model, and deployment.
+- **[Roadmap & backlog](ISSUE_DRAFTS.md)** — the production & market issue backlog.
+- **API reference** — _planned (see the "public verification API" item in the backlog)._
+
+## 🤝 Contributing
+
+Contributions are welcome. Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the workflow, coding standards, and how to run the test suite.
+
+- **Security:** found a vulnerability? Follow the responsible-disclosure process in **[SECURITY.md](SECURITY.md)** — please do **not** open a public issue for security reports.
+- **Issue labels:** `bug`, `docs`, `frontend`, `contracts`, `database`, `security`.
+
+## 📄 License
 
 This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
 
