@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { LogOut } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 import { ConnectWallet } from '@/components/ui/ConnectWallet';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -67,6 +67,18 @@ export function DashboardTopbar({
 
                 <div className="flex items-center gap-2 sm:gap-3">
                     <ConnectWallet />
+                    <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label="Account settings"
+                    >
+                        <Link href="/dashboard/settings">
+                            <Settings className="h-4 w-4" />
+                            <span className="hidden sm:inline">Settings</span>
+                        </Link>
+                    </Button>
                     <Button
                         onClick={onSignOut}
                         variant="ghost"
