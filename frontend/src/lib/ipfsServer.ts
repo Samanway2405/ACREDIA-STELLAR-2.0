@@ -118,3 +118,35 @@ export async function pinJsonToPinata(content: unknown): Promise<string> {
 
     return parsePinataCid(await response.json());
 }
+
+export interface EncryptedPayload {
+    encrypted: true;
+    algorithm: 'AES-GCM';
+    iv: string;
+    ciphertext: string;
+}
+
+export async function encryptBufferAESGCM(data: Uint8Array, secretKeyHex: string): Promise<EncryptedPayload> {
+    const keyBytes = new Uint8Array(secretKeyHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []);
+    const cryptoKey = await globalThis.crypto.subtle.importKey('raw', keyBytes as unknown as BufferSource, 'AES-GCM', false, ['encrypt']);
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+    const encryptedBuffer = await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, data as unknown as BufferSource);
+
+    return {
+        encrypted: true,
+        algorithm: 'AES-GCM',
+        iv: Buffer.from(iv).toString('base64'),
+        ciphertext: Buffer.from(encryptedBuffer).toString('base64'),
+    };
+}
+
+export async function decryptBufferAESGCM(payload: EncryptedPayload, secretKeyHex: string): Promise<Uint8Array> {
+    const keyBytes = new Uint8Array(secretKeyHex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []);
+    const cryptoKey = await globalThis.crypto.subtle.importKey('raw', keyBytes as unknown as BufferSource, 'AES-GCM', false, ['decrypt']);
+    const iv = new Uint8Array(Buffer.from(payload.iv, 'base64'));
+    const ciphertext = new Uint8Array(Buffer.from(payload.ciphertext, 'base64'));
+    const decryptedBuffer = await globalThis.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext as unknown as BufferSource);
+
+    return new Uint8Array(decryptedBuffer);
+}
+

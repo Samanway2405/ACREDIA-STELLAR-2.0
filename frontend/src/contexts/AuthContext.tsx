@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const e2eState = getE2eState();
         if (e2eState?.enabled && e2eState.session) {
-            setUser(e2eState.session.user as User);
+            setUser(e2eState.session.user as unknown as User);
             setUserRole(e2eState.role ?? 'unknown');
             setLoading(false);
             return;
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Check active sessions
         safeGetSession()
             .then(({ data: { session } }) => {
-                const nextUser = session?.user ?? null;
+                const nextUser = (session?.user ?? null) as User | null;
                 setUser(nextUser);
                 resolveRole(nextUser);
                 setLoading(false);
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
-            const nextUser = session?.user ?? null;
+            const nextUser = (session?.user ?? null) as User | null;
             setUser(nextUser);
             resolveRole(nextUser);
             setLoading(false);
