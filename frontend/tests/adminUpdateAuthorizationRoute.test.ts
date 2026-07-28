@@ -78,6 +78,7 @@ describe('admin update authorization route', () => {
         expect(payload.success).toBe(true);
         expect(mockUpdate).toHaveBeenCalledWith({
             verified: true,
+            status: 'verified',
             authorization_tx_hash: 'a'.repeat(64),
         });
         expect(mockEqAfterUpdate).toHaveBeenCalledWith('id', 'institution-1');

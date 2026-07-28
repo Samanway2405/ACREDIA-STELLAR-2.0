@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS public.institutions (
     email                 TEXT UNIQUE NOT NULL,
     wallet_address        TEXT UNIQUE,
     verified              BOOLEAN DEFAULT false,
+    status                TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'suspended', 'rejected')),
     authorization_tx_hash TEXT,
     created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -453,7 +454,7 @@ CREATE POLICY "Institutions can insert credentials"
   ON public.credentials FOR INSERT
   WITH CHECK (
     institution_id IN (
-      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid()
+      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid() AND verified = true
     )
   );
 
@@ -461,12 +462,12 @@ CREATE POLICY "Institutions can update own credentials"
   ON public.credentials FOR UPDATE
   USING (
     institution_id IN (
-      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid()
+      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid() AND verified = true
     )
   )
   WITH CHECK (
     institution_id IN (
-      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid()
+      SELECT id FROM public.institutions WHERE auth_user_id = auth.uid() AND verified = true
     )
   );
 

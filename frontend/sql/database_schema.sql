@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS public.institutions (
     email                 TEXT UNIQUE NOT NULL,
     wallet_address        TEXT UNIQUE,
     verified              BOOLEAN DEFAULT false,
+    status                TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'suspended', 'rejected')),
     authorization_tx_hash TEXT,
     created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

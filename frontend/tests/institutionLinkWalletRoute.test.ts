@@ -92,6 +92,7 @@ describe('institution link wallet route', () => {
         expect(mockUpdate).toHaveBeenCalledWith({
             wallet_address: walletAddress,
             verified: false,
+            status: 'pending',
             authorization_tx_hash: null,
         });
         expect(mockFirstEqAfterUpdate).toHaveBeenCalledWith('id', 'institution-1');

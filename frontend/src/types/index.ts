@@ -18,6 +18,7 @@ export interface Institution {
     name: string;
     wallet_address?: string;
     verified: boolean;
+    status?: 'pending' | 'verified' | 'suspended' | 'rejected';
     created_at: string;
 }
 

@@ -64,6 +64,7 @@ function DashboardContent() {
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [institutionId, setInstitutionId] = useState('');
     const [institutionWalletAddress, setInstitutionWalletAddress] = useState<string | null>(null);
+    const [institutionStatus, setInstitutionStatus] = useState<string>('pending');
     const [loadingInstitution, setLoadingInstitution] = useState(true);
     const [linkingInstitutionWallet, setLinkingInstitutionWallet] = useState(false);
     const walletLinkInFlight = useRef<string | null>(null);
@@ -73,6 +74,7 @@ function DashboardContent() {
             if (!user || userRole !== 'institution') {
                 setInstitutionId('');
                 setInstitutionWalletAddress(null);
+                setInstitutionStatus('pending');
                 setLoadingInstitution(false);
                 return;
             }
@@ -80,7 +82,7 @@ function DashboardContent() {
             try {
                 const { data, error } = await supabase
                     .from('institutions')
-                    .select('id, wallet_address')
+                    .select('id, wallet_address, status')
                     .eq('auth_user_id', user.id)
                     .maybeSingle();
 
@@ -93,6 +95,7 @@ function DashboardContent() {
                 if (data) {
                     setInstitutionId(data.id);
                     setInstitutionWalletAddress(data.wallet_address ?? null);
+                    setInstitutionStatus(data.status || 'pending');
                     debugLog('Institution profile loaded for dashboard.');
                     return;
                 }
@@ -109,7 +112,7 @@ function DashboardContent() {
                             name: user.email?.split('@')[0] || 'Institution',
                         },
                     ])
-                    .select('id, wallet_address')
+                    .select('id, wallet_address, status')
                     .single();
 
                 if (createError) {
@@ -121,6 +124,7 @@ function DashboardContent() {
                 if (newInstitution) {
                     setInstitutionId(newInstitution.id);
                     setInstitutionWalletAddress(newInstitution.wallet_address ?? null);
+                    setInstitutionStatus(newInstitution.status || 'pending');
                     toast.success('Institution profile created');
                 }
             } catch (error) {
@@ -241,7 +245,7 @@ function DashboardContent() {
                             <h3 className="mb-5 text-base font-semibold text-foreground">
                                 Account information
                             </h3>
-                            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
                                 <InfoField label="Email">{user?.email}</InfoField>
                                 <InfoField label="Role">
                                     <span className="capitalize">{userRole}</span>
@@ -251,6 +255,16 @@ function DashboardContent() {
                                         address={address}
                                         linking={linkingInstitutionWallet}
                                     />
+                                </InfoField>
+                                <InfoField label="Verification Status">
+                                    <span className={`inline-flex items-center gap-1.5 font-semibold capitalize ${
+                                        institutionStatus === 'verified' ? 'text-success' :
+                                        institutionStatus === 'pending' ? 'text-warning' :
+                                        institutionStatus === 'rejected' ? 'text-destructive' :
+                                        'text-muted-foreground'
+                                    }`}>
+                                        {institutionStatus}
+                                    </span>
                                 </InfoField>
                             </div>
                         </Card>
@@ -278,13 +292,24 @@ function DashboardContent() {
                             </TabsList>
 
                             <TabsContent value="issue" className="mt-6">
-                                <CredentialUploadForm
-                                    institutionId={institutionId}
-                                    institutionName={institutionName}
-                                    institutionWallet={institutionWallet}
-                                    account={address}
-                                    onSuccess={handleCredentialIssued}
-                                />
+                                {institutionStatus === 'verified' ? (
+                                    <CredentialUploadForm
+                                        institutionId={institutionId}
+                                        institutionName={institutionName}
+                                        institutionWallet={institutionWallet}
+                                        account={address}
+                                        onSuccess={handleCredentialIssued}
+                                    />
+                                ) : (
+                                    <Card className="p-8 text-center border-warning/25 bg-warning/8">
+                                        <Shield className="mx-auto mb-4 h-12 w-12 text-warning" />
+                                        <h3 className="text-lg font-bold text-foreground">Verification Required</h3>
+                                        <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                                            Your institution account status is currently <strong>{institutionStatus}</strong>.
+                                            You must be approved by an administrator and verified on-chain before you can issue academic credentials.
+                                        </p>
+                                    </Card>
+                                )}
                             </TabsContent>
 
                             <TabsContent value="view" className="mt-6">
