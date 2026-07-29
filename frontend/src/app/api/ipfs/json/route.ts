@@ -25,7 +25,7 @@ const IPFS_JSON_USER_QUOTA = {
 export async function POST(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
     try {
-        const ipRateLimitResponse = enforceRateLimit(request, IPFS_JSON_IP_RATE_LIMIT);
+        const ipRateLimitResponse = await enforceRateLimit(request, IPFS_JSON_IP_RATE_LIMIT);
         if (ipRateLimitResponse) {
             return ipRateLimitResponse;
         }
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const userRateLimitResponse = enforceRateLimit(request, {
+        const userRateLimitResponse = await enforceRateLimit(request, {
             ...IPFS_JSON_USER_QUOTA,
             identifier: authCheck.userId,
         });

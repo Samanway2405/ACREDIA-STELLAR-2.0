@@ -124,7 +124,7 @@ export async function GET(
             );
         }
 
-        const rateLimitResponse = enforceRateLimit(request, VERIFY_RATE_LIMIT);
+        const rateLimitResponse = await enforceRateLimit(request, VERIFY_RATE_LIMIT);
         if (rateLimitResponse) {
             return rateLimitResponse;
         }

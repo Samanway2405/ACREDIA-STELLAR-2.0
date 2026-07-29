@@ -30,7 +30,7 @@ type CredentialRow = {
 export async function GET(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
     try {
-        const rateLimitResponse = enforceRateLimit(request, STUDENT_CREDENTIALS_RATE_LIMIT);
+        const rateLimitResponse = await enforceRateLimit(request, STUDENT_CREDENTIALS_RATE_LIMIT);
         if (rateLimitResponse) {
             return rateLimitResponse;
         }

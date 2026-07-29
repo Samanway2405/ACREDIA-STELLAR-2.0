@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthenticatedRequest, getServiceRoleClient } from '@/lib/serverAuth';
 import { unpinFromPinata } from '@/lib/ipfsServer';
 import { captureException } from '@/lib/debug';
+import { enforceRateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
+
+const ACCOUNT_ERASE_RATE_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 5,
+    prefix: 'account-erase',
+} as const;
 
 /**
  * POST /api/account/erase
@@ -28,6 +35,11 @@ export async function POST(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
 
     try {
+        const rateLimitResponse = await enforceRateLimit(request, ACCOUNT_ERASE_RATE_LIMIT);
+        if (rateLimitResponse) {
+            return rateLimitResponse;
+        }
+
         // 1. Authenticate.
         const authCheck = await requireAuthenticatedRequest(request);
         if (!authCheck.ok) {

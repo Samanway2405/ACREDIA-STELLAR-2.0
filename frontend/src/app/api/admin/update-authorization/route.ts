@@ -15,7 +15,7 @@ const ADMIN_UPDATE_AUTHORIZATION_RATE_LIMIT = {
 export async function POST(request: NextRequest) {
     const requestId = request.headers.get('x-request-id') || 'unknown';
     try {
-        const rateLimitResponse = enforceRateLimit(request, ADMIN_UPDATE_AUTHORIZATION_RATE_LIMIT);
+        const rateLimitResponse = await enforceRateLimit(request, ADMIN_UPDATE_AUTHORIZATION_RATE_LIMIT);
         if (rateLimitResponse) {
             return rateLimitResponse;
         }
